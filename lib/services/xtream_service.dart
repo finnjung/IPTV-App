@@ -43,7 +43,12 @@ class XtreamService extends ChangeNotifier {
   final Map<String, List<XTremeCodeVodItem>> _vodByCategory = {};
   final Map<String, List<XTremeCodeSeriesItem>> _seriesByCategory = {};
 
+  // Leere Serien (ohne Episoden) - werden lazy beim Öffnen markiert
+  Set<int> _emptySeriesIds = {};
+  bool _autoHideEmptySeries = true;
+
   bool get isConnected => _isConnected;
+  bool get autoHideEmptySeries => _autoHideEmptySeries;
   bool get isLoading => _isLoading;
   String? get error => _error;
   XtreamCredentials? get credentials => _credentials;
@@ -69,6 +74,9 @@ class XtreamService extends ChangeNotifier {
     final password = prefs.getString('xtream_password');
     final corsProxy = prefs.getString('xtream_cors_proxy');
 
+    // Leere Serien-IDs laden
+    await _loadEmptySeriesIds();
+
     if (serverUrl != null && username != null && password != null) {
       _credentials = XtreamCredentials(
         serverUrl: serverUrl,
@@ -78,7 +86,7 @@ class XtreamService extends ChangeNotifier {
         corsProxy: corsProxy,
       );
 
-      await connect(_credentials!);
+      await connect(_credentials!, skipValidation: true);
     }
   }
 
@@ -96,7 +104,7 @@ class XtreamService extends ChangeNotifier {
     _credentials = credentials;
   }
 
-  Future<bool> connect(XtreamCredentials credentials) async {
+  Future<bool> connect(XtreamCredentials credentials, {bool skipValidation = false}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -247,8 +255,12 @@ class XtreamService extends ChangeNotifier {
 
     try {
       final series = await client!.seriesItems(category: category);
-      _seriesByCategory[key] = series;
-      return series;
+      // Leere Serien ausfiltern (nur wenn aktiviert)
+      final filteredSeries = _autoHideEmptySeries
+          ? series.where((s) => !_emptySeriesIds.contains(s.seriesId)).toList()
+          : series;
+      _seriesByCategory[key] = filteredSeries;
+      return filteredSeries;
     } catch (e) {
       final cause = e is XTreamCodeClientException ? e.cause : e.toString();
       debugPrint('Error loading series: $cause');
@@ -332,4 +344,129 @@ class XtreamService extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  /// Lädt die gespeicherten leeren Serien-IDs und Einstellungen
+  Future<void> _loadEmptySeriesIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('empty_series_ids') ?? [];
+    _emptySeriesIds = ids.map((id) => int.tryParse(id) ?? 0).toSet();
+    _autoHideEmptySeries = prefs.getBool('auto_hide_empty_series') ?? true;
+    debugPrint('Loaded ${_emptySeriesIds.length} empty series IDs, autoHide: $_autoHideEmptySeries');
+  }
+
+  /// Aktiviert/Deaktiviert das automatische Ausblenden leerer Serien
+  Future<void> setAutoHideEmptySeries(bool value) async {
+    _autoHideEmptySeries = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_hide_empty_series', value);
+
+    // Cache leeren damit Listen neu geladen werden
+    _seriesByCategory.clear();
+    notifyListeners();
+
+    debugPrint('Auto-hide empty series: $value');
+  }
+
+  /// Speichert die leeren Serien-IDs
+  Future<void> _saveEmptySeriesIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      'empty_series_ids',
+      _emptySeriesIds.map((id) => id.toString()).toList(),
+    );
+  }
+
+  /// Markiert eine Serie als leer (lazy validation)
+  Future<void> markSeriesAsEmpty(int seriesId) async {
+    // Nur markieren wenn Auto-Hide aktiviert ist
+    if (!_autoHideEmptySeries) return;
+
+    if (!_emptySeriesIds.contains(seriesId)) {
+      _emptySeriesIds.add(seriesId);
+      await _saveEmptySeriesIds();
+
+      // Cache leeren damit die Serie aus Listen verschwindet
+      _seriesByCategory.clear();
+      notifyListeners();
+
+      debugPrint('Marked series $seriesId as empty. Total: ${_emptySeriesIds.length}');
+    }
+  }
+
+  /// Löscht alle gespeicherten leeren Serien-IDs (Reset)
+  Future<void> clearEmptySeriesIds() async {
+    _emptySeriesIds.clear();
+    _seriesByCategory.clear();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('empty_series_ids');
+
+    notifyListeners();
+    debugPrint('Cleared all empty series IDs');
+  }
+
+  /// Prüft ob eine Serie leer ist
+  bool isSeriesEmpty(XTremeCodeSeriesItem series) {
+    return _emptySeriesIds.contains(series.seriesId);
+  }
+
+  /// Gibt die Anzahl der als leer markierten Serien zurück
+  int get emptySeriesCount => _emptySeriesIds.length;
+
+  /// Sucht nach Filmen, Serien und Live TV
+  /// Gibt gefilterte Listen zurück basierend auf dem Suchbegriff
+  Future<SearchResults> search(String query) async {
+    if (!_isConnected || client == null || query.length < 2) {
+      return SearchResults.empty();
+    }
+
+    final lowerQuery = query.toLowerCase();
+
+    // Alle Daten laden falls nicht gecacht
+    final allMovies = await getMovies();
+    final allSeries = await getSeries();
+    final allLiveStreams = await getLiveStreams();
+
+    // Filtern nach Suchbegriff
+    final movies = allMovies
+        .where((m) => (m.name ?? '').toLowerCase().contains(lowerQuery))
+        .toList();
+
+    final series = allSeries
+        .where((s) =>
+            (s.name ?? '').toLowerCase().contains(lowerQuery) &&
+            (!_autoHideEmptySeries || !_emptySeriesIds.contains(s.seriesId)))
+        .toList();
+
+    final liveStreams = allLiveStreams
+        .where((l) => (l.name ?? '').toLowerCase().contains(lowerQuery))
+        .toList();
+
+    return SearchResults(
+      movies: movies,
+      series: series,
+      liveStreams: liveStreams,
+    );
+  }
+}
+
+class SearchResults {
+  final List<XTremeCodeVodItem> movies;
+  final List<XTremeCodeSeriesItem> series;
+  final List<XTremeCodeLiveStreamItem> liveStreams;
+
+  SearchResults({
+    required this.movies,
+    required this.series,
+    required this.liveStreams,
+  });
+
+  factory SearchResults.empty() => SearchResults(
+        movies: [],
+        series: [],
+        liveStreams: [],
+      );
+
+  bool get isEmpty => movies.isEmpty && series.isEmpty && liveStreams.isEmpty;
+  int get totalCount => movies.length + series.length + liveStreams.length;
 }

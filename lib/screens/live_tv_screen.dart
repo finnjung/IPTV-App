@@ -7,6 +7,7 @@ import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
 import '../widgets/category_chip.dart';
 import 'player_screen.dart';
+import 'search_screen.dart';
 
 class LiveTvScreen extends StatefulWidget {
   const LiveTvScreen({super.key});
@@ -115,6 +116,33 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                                   fontSize: 26,
                                   fontWeight: FontWeight.w700,
                                   color: colorScheme.onSurface,
+                                ),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const SearchScreen(),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: SvgPicture.asset(
+                                    'assets/icons/magnifying-glass.svg',
+                                    width: 22,
+                                    height: 22,
+                                    colorFilter: ColorFilter.mode(
+                                      colorScheme.onSurface.withAlpha(180),
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],

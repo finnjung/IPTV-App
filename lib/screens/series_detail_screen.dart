@@ -32,6 +32,18 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final info = await xtreamService.getSeriesInfo(widget.series);
 
     if (mounted) {
+      // Prüfen ob die Serie leer ist (keine Episoden/Staffeln)
+      final isEmpty = info == null ||
+          info.episodes == null ||
+          info.episodes!.isEmpty ||
+          info.seasons == null ||
+          info.seasons!.isEmpty;
+
+      if (isEmpty && widget.series.seriesId != null) {
+        // Serie als leer markieren für zukünftiges Ausblenden
+        await xtreamService.markSeriesAsEmpty(widget.series.seriesId!);
+      }
+
       setState(() {
         _seriesInfo = info;
         _isLoading = false;
@@ -241,8 +253,39 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
                 // Episodes
-                if (_seriesInfo?.episodes != null)
-                  _buildEpisodesList(colorScheme),
+                if (_seriesInfo?.episodes != null &&
+                    _seriesInfo?.seasons != null &&
+                    _seriesInfo!.seasons!.isNotEmpty)
+                  _buildEpisodesList(colorScheme)
+                else if (!_isLoading)
+                  SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Column(
+                          children: [
+                            SvgPicture.asset(
+                              'assets/icons/monitor-play.svg',
+                              width: 48,
+                              height: 48,
+                              colorFilter: ColorFilter.mode(
+                                colorScheme.onSurface.withAlpha(100),
+                                BlendMode.srcIn,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Keine Episoden verfügbar',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                color: colorScheme.onSurface.withAlpha(150),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
 
                 const SliverToBoxAdapter(child: SizedBox(height: 100)),
               ],
@@ -251,6 +294,25 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   }
 
   Widget _buildEpisodesList(ColorScheme colorScheme) {
+    // Sicherheitsprüfung
+    if (_seriesInfo?.seasons == null ||
+        _seriesInfo!.seasons!.isEmpty ||
+        _selectedSeason >= _seriesInfo!.seasons!.length) {
+      return SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(40),
+            child: Text(
+              'Keine Staffeln verfügbar',
+              style: GoogleFonts.poppins(
+                color: colorScheme.onSurface.withAlpha(150),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final seasonNumber = _seriesInfo!.seasons![_selectedSeason].seasonNumber;
     final episodes = _seriesInfo!.episodes?[seasonNumber.toString()] ?? [];
 

@@ -8,6 +8,7 @@ import '../../screens/live_tv_screen.dart';
 import '../../screens/movies_screen.dart';
 import '../../screens/series_screen.dart';
 import '../../screens/profile_screen.dart';
+import '../../screens/search_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -92,6 +93,14 @@ class _MainNavigationState extends State<MainNavigation>
 
       _slideLineController.forward(from: 0);
     }
+  }
+
+  void _openSearch() {
+    HapticFeedback.lightImpact();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SearchScreen()),
+    );
   }
 
   Widget _buildTabIcon(int index, bool isActive) {
@@ -207,6 +216,29 @@ class _MainNavigationState extends State<MainNavigation>
               ),
 
               const Spacer(),
+
+              // Such-Icon
+              GestureDetector(
+                onTap: _openSearch,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SvgPicture.asset(
+                    'assets/icons/magnifying-glass.svg',
+                    width: 24,
+                    height: 24,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(150),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
 
               // Profil Icon rechts
               GestureDetector(
@@ -347,7 +379,6 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   Widget build(BuildContext context) {
     final isDesktop = kIsWeb && _isDesktop(context);
-
     return Scaffold(
       appBar: isDesktop
           ? AppBar(

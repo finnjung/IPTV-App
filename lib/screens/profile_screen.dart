@@ -5,8 +5,345 @@ import 'package:provider/provider.dart';
 import '../services/xtream_service.dart';
 import 'login_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  Widget _buildEmptySeriesSection(ColorScheme colorScheme, XtreamService xtreamService) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Leere Serien',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.primary,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outline.withAlpha(25),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              // Info-Box
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withAlpha(15),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/icons/info.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.primary,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Manche Serien haben keine Episoden hinterlegt. '
+                        'Für eine bessere Nutzererfahrung werden diese automatisch ausgeblendet, '
+                        'sobald du sie einmal öffnest.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: colorScheme.onSurface.withAlpha(180),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Toggle
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withAlpha(25),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: SvgPicture.asset(
+                        'assets/icons/eye-slash.svg',
+                        width: 20,
+                        height: 20,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.primary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Automatisch ausblenden',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            xtreamService.autoHideEmptySeries
+                                ? 'Leere Serien werden versteckt'
+                                : 'Alle Serien werden angezeigt',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: xtreamService.autoHideEmptySeries,
+                      onChanged: (value) {
+                        xtreamService.setAutoHideEmptySeries(value);
+                      },
+                      activeTrackColor: colorScheme.primary.withAlpha(150),
+                      thumbColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return colorScheme.primary;
+                        }
+                        return null;
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+
+              Divider(
+                height: 1,
+                indent: 60,
+                color: colorScheme.outline.withAlpha(25),
+              ),
+
+              // Ausgeblendete Serien Zähler & Reset
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: xtreamService.emptySeriesCount > 0 ? _showResetBottomSheet : null,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withAlpha(25),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: SvgPicture.asset(
+                            'assets/icons/arrows-clockwise.svg',
+                            width: 20,
+                            height: 20,
+                            colorFilter: ColorFilter.mode(
+                              colorScheme.primary,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Ausgeblendete Serien',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                xtreamService.emptySeriesCount > 0
+                                    ? '${xtreamService.emptySeriesCount} Serien ausgeblendet'
+                                    : 'Keine Serien ausgeblendet',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: colorScheme.onSurface.withAlpha(150),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (xtreamService.emptySeriesCount > 0)
+                          SvgPicture.asset(
+                            'assets/icons/caret-right.svg',
+                            width: 18,
+                            height: 18,
+                            colorFilter: ColorFilter.mode(
+                              colorScheme.onSurface.withAlpha(100),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showResetBottomSheet() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.read<XtreamService>();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurface.withAlpha(50),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withAlpha(25),
+                shape: BoxShape.circle,
+              ),
+              child: SvgPicture.asset(
+                'assets/icons/arrows-clockwise.svg',
+                width: 32,
+                height: 32,
+                colorFilter: ColorFilter.mode(
+                  colorScheme.primary,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Title
+            Text(
+              'Ausgeblendete Serien zurücksetzen?',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+
+            // Description
+            Text(
+              'Alle ${xtreamService.emptySeriesCount} als leer markierten Serien werden wieder angezeigt. '
+              'Leere Serien werden beim nächsten Öffnen erneut ausgeblendet.',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: colorScheme.onSurface.withAlpha(150),
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: colorScheme.outline.withAlpha(50)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Abbrechen',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      xtreamService.clearEmptySeriesIds();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Zurücksetzen',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -185,6 +522,11 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 24),
+
+                // Leere Serien ausblenden
+                _buildEmptySeriesSection(colorScheme, xtreamService),
 
                 const SizedBox(height: 24),
 
@@ -445,3 +787,4 @@ class _SettingsItem {
     this.onTap,
   });
 }
+
