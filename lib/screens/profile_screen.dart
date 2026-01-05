@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -603,6 +604,304 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildDebugSection(ColorScheme colorScheme, XtreamService xtreamService) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Debug / Entwicklung',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.error.withAlpha(200),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.error.withAlpha(50),
+              width: 1,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _showDebugAnalysis(xtreamService),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.error.withAlpha(25),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: SvgPicture.asset(
+                        'assets/icons/broadcast.svg',
+                        width: 20,
+                        height: 20,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.error.withAlpha(200),
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Live TV Kürzel analysieren',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Präfixe/Suffixe und Sonderzeichen finden',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SvgPicture.asset(
+                      'assets/icons/caret-right.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(100),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showDebugAnalysis(XtreamService xtreamService) async {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Analysiere Live-Sender...',
+                style: GoogleFonts.poppins(color: colorScheme.onSurface),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Load streams
+    final streams = await xtreamService.getLiveStreams();
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading
+
+    // Analyse prefixes/suffixes with colon
+    final prefixesWithColon = <String, int>{};
+    final suffixesWithColon = <String, int>{};
+    final titlesWithSpecialChars = <String>[];
+    final allTitles = <String>[];
+
+    // Regex für Sonderzeichen (nicht ASCII-Buchstaben/Zahlen/normale Zeichen)
+    final specialCharPattern = RegExp(r'[^\x00-\x7F]');
+    // Regex für typische "Qualitäts"-Sonderzeichen (Unicode-Varianten)
+    final qualitySpecialPattern = RegExp(r'[①②③④⑤⑥⑦⑧⑨⓪ⓊⒽⒹ🅄🅗🅓⁴ᵏ⁴ᴷ⁴ᴷ⁺ᵁᴴᴰᶠᴴᴰ⟮⟯「」『』【】〖〗〔〕｜]');
+
+    for (final stream in streams) {
+      final name = stream.name ?? '';
+      allTitles.add(name);
+
+      // Check for special characters
+      if (specialCharPattern.hasMatch(name) || qualitySpecialPattern.hasMatch(name)) {
+        titlesWithSpecialChars.add(name);
+      }
+
+      // Extract prefix before colon (e.g., "4K:" -> "4K")
+      final prefixMatch = RegExp(r'^([^:]{1,20}):').firstMatch(name);
+      if (prefixMatch != null) {
+        final prefix = prefixMatch.group(1)!.trim().toUpperCase();
+        prefixesWithColon[prefix] = (prefixesWithColon[prefix] ?? 0) + 1;
+      }
+
+      // Extract suffix after colon at end (e.g., ":HD" -> "HD")
+      final suffixMatch = RegExp(r':([^:]{1,20})$').firstMatch(name);
+      if (suffixMatch != null) {
+        final suffix = suffixMatch.group(1)!.trim().toUpperCase();
+        suffixesWithColon[suffix] = (suffixesWithColon[suffix] ?? 0) + 1;
+      }
+    }
+
+    // Sort by frequency
+    final sortedPrefixes = prefixesWithColon.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final sortedSuffixes = suffixesWithColon.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    // Build report
+    final report = StringBuffer();
+    report.writeln('=== LIVE TV ANALYSE ===');
+    report.writeln('Gesamt: ${streams.length} Sender\n');
+
+    report.writeln('--- PRÄFIXE MIT DOPPELPUNKT (${sortedPrefixes.length} unique) ---');
+    for (final entry in sortedPrefixes) {
+      report.writeln('  ${entry.key}: (${entry.value}x)');
+    }
+
+    report.writeln('\n--- SUFFIXE MIT DOPPELPUNKT (${sortedSuffixes.length} unique) ---');
+    for (final entry in sortedSuffixes) {
+      report.writeln('  :${entry.key} (${entry.value}x)');
+    }
+
+    report.writeln('\n--- TITEL MIT SONDERZEICHEN (${titlesWithSpecialChars.length}) ---');
+    for (final title in titlesWithSpecialChars.take(100)) {
+      report.writeln('  $title');
+    }
+    if (titlesWithSpecialChars.length > 100) {
+      report.writeln('  ... und ${titlesWithSpecialChars.length - 100} weitere');
+    }
+
+    final reportText = report.toString();
+
+    // Also print to console
+    debugPrint(reportText);
+
+    // Show bottom sheet with results
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withAlpha(50),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title + Copy Button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Text(
+                      'Live TV Analyse',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: reportText));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('In Zwischenablage kopiert!', style: GoogleFonts.poppins()),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 18),
+                      label: Text('Kopieren', style: GoogleFonts.poppins(fontSize: 13)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Stats
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    _StatChip(label: '${streams.length} Sender', colorScheme: colorScheme),
+                    const SizedBox(width: 8),
+                    _StatChip(label: '${sortedPrefixes.length} Präfixe', colorScheme: colorScheme),
+                    const SizedBox(width: 8),
+                    _StatChip(label: '${titlesWithSpecialChars.length} Sonderz.', colorScheme: colorScheme),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: SelectableText(
+                    reportText,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: colorScheme.onSurface.withAlpha(220),
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -812,6 +1111,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 24),
+
+                // Debug: Live TV Analyse
+                _buildDebugSection(colorScheme, xtreamService),
 
                 const SizedBox(height: 24),
 
@@ -1049,6 +1353,32 @@ class _SettingsItem {
     required this.subtitle,
     this.onTap,
   });
+}
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  final ColorScheme colorScheme;
+
+  const _StatChip({required this.label, required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.onSurface.withAlpha(20),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: colorScheme.onSurface.withAlpha(180),
+        ),
+      ),
+    );
+  }
 }
 
 class _LanguageOption extends StatelessWidget {

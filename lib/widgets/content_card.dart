@@ -235,12 +235,55 @@ class ContentCard extends StatelessWidget {
                   ),
                 ),
 
-              // Live Badge - sanfte Animation
+              // Live Badge - sanfte Animation + Qualitäts/Länder-Badge für Live-TV
               if (isLive)
                 Positioned(
                   top: 8,
+                  left: 8,
                   right: 8,
-                  child: _LiveBadge(),
+                  child: Row(
+                    children: [
+                      // Länder-Badge links (DE, UK, US, etc.)
+                      if (metadata.country != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.country!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      // Qualitäts-Badge (4K, HD, etc.)
+                      if (metadata.quality != null) ...[
+                        if (metadata.country != null) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      // LIVE Badge rechts
+                      _LiveBadge(),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -327,15 +370,8 @@ class _LiveBadgeState extends State<_LiveBadge>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFE53935),
+              color: Colors.black54,
               borderRadius: BorderRadius.circular(6),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFE53935).withAlpha(100),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -344,7 +380,7 @@ class _LiveBadgeState extends State<_LiveBadge>
                   width: 6,
                   height: 6,
                   decoration: const BoxDecoration(
-                    color: Colors.white,
+                    color: Color(0xFFE53935), // Roter Punkt
                     shape: BoxShape.circle,
                   ),
                 ),
