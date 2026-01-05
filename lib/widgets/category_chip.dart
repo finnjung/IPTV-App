@@ -23,28 +23,19 @@ class CategoryChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? colorScheme.primary : colorScheme.surface,
+          color: isSelected ? colorScheme.onSurface : colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? colorScheme.primary
+                ? colorScheme.onSurface
                 : colorScheme.outline.withAlpha(50),
             width: 1,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: colorScheme.primary.withAlpha(50),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
         ),
         child: Text(
           label,
           style: GoogleFonts.poppins(
-            color: isSelected ? Colors.white : colorScheme.onSurface.withAlpha(180),
+            color: isSelected ? colorScheme.surface : colorScheme.onSurface.withAlpha(180),
             fontSize: 13,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
           ),

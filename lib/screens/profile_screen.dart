@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../services/xtream_service.dart';
+import '../utils/content_parser.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -24,7 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: GoogleFonts.poppins(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: colorScheme.primary,
+              color: colorScheme.onSurface.withAlpha(150),
               letterSpacing: 0.5,
             ),
           ),
@@ -44,7 +45,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: colorScheme.primary.withAlpha(15),
+                  color: colorScheme.onSurface.withAlpha(10),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 ),
                 child: Row(
@@ -55,7 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: 20,
                       height: 20,
                       colorFilter: ColorFilter.mode(
-                        colorScheme.primary,
+                        colorScheme.onSurface.withAlpha(150),
                         BlendMode.srcIn,
                       ),
                     ),
@@ -84,7 +85,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: colorScheme.primary.withAlpha(25),
+                        color: colorScheme.onSurface.withAlpha(15),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: SvgPicture.asset(
@@ -92,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         width: 20,
                         height: 20,
                         colorFilter: ColorFilter.mode(
-                          colorScheme.primary,
+                          colorScheme.onSurface.withAlpha(180),
                           BlendMode.srcIn,
                         ),
                       ),
@@ -128,10 +129,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onChanged: (value) {
                         xtreamService.setAutoHideEmptySeries(value);
                       },
-                      activeTrackColor: colorScheme.primary.withAlpha(150),
+                      activeTrackColor: colorScheme.onSurface.withAlpha(100),
                       thumbColor: WidgetStateProperty.resolveWith((states) {
                         if (states.contains(WidgetState.selected)) {
-                          return colorScheme.primary;
+                          return colorScheme.onSurface;
                         }
                         return null;
                       }),
@@ -159,7 +160,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: colorScheme.primary.withAlpha(25),
+                            color: colorScheme.onSurface.withAlpha(15),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: SvgPicture.asset(
@@ -167,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             width: 20,
                             height: 20,
                             colorFilter: ColorFilter.mode(
-                              colorScheme.primary,
+                              colorScheme.onSurface.withAlpha(180),
                               BlendMode.srcIn,
                             ),
                           ),
@@ -220,6 +221,263 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildLanguageSection(ColorScheme colorScheme, XtreamService xtreamService) {
+    final currentLanguage = xtreamService.preferredLanguage;
+    final languageName = currentLanguage != null
+        ? ContentParser.languageCodes[currentLanguage] ?? currentLanguage
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Sprache',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface.withAlpha(150),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outline.withAlpha(25),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              // Info-Box
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.onSurface.withAlpha(10),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/icons/info.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(150),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Inhalte in deiner bevorzugten Sprache werden auf der Startseite priorisiert angezeigt.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: colorScheme.onSurface.withAlpha(180),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Language Selection
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _showLanguageBottomSheet,
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: colorScheme.onSurface.withAlpha(15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: SvgPicture.asset(
+                            'assets/icons/globe.svg',
+                            width: 20,
+                            height: 20,
+                            colorFilter: ColorFilter.mode(
+                              colorScheme.onSurface.withAlpha(180),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Bevorzugte Sprache',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                languageName ?? 'Keine Präferenz',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: colorScheme.onSurface.withAlpha(150),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SvgPicture.asset(
+                          'assets/icons/caret-right.svg',
+                          width: 18,
+                          height: 18,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.onSurface.withAlpha(100),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showLanguageBottomSheet() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.read<XtreamService>();
+
+    // Die häufigsten Sprachen zuerst
+    final priorityLanguages = ['DE', 'EN', 'TR', 'FR', 'ES', 'IT', 'AR', 'RU', 'PL'];
+    final otherLanguages = ContentParser.languageCodes.keys
+        .where((code) => !priorityLanguages.contains(code) && code.length <= 2)
+        .toList()
+      ..sort();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colorScheme.onSurface.withAlpha(50),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Title
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'Bevorzugte Sprache',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Language List
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  // "Keine Präferenz" Option
+                  _LanguageOption(
+                    code: null,
+                    name: 'Keine Präferenz',
+                    isSelected: xtreamService.preferredLanguage == null,
+                    onTap: () {
+                      xtreamService.setPreferredLanguage(null);
+                      Navigator.pop(context);
+                    },
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(
+                      height: 1,
+                      color: colorScheme.outline.withAlpha(25),
+                    ),
+                  ),
+
+                  // Priority Languages
+                  ...priorityLanguages.map((code) => _LanguageOption(
+                        code: code,
+                        name: ContentParser.languageCodes[code] ?? code,
+                        isSelected: xtreamService.preferredLanguage == code,
+                        onTap: () {
+                          xtreamService.setPreferredLanguage(code);
+                          Navigator.pop(context);
+                        },
+                      )),
+
+                  if (otherLanguages.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(
+                        height: 1,
+                        color: colorScheme.outline.withAlpha(25),
+                      ),
+                    ),
+
+                    // Other Languages
+                    ...otherLanguages.map((code) => _LanguageOption(
+                          code: code,
+                          name: ContentParser.languageCodes[code] ?? code,
+                          isSelected: xtreamService.preferredLanguage == code,
+                          onTap: () {
+                            xtreamService.setPreferredLanguage(code);
+                            Navigator.pop(context);
+                          },
+                        )),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showResetBottomSheet() {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.read<XtreamService>();
@@ -252,7 +510,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: colorScheme.primary.withAlpha(25),
+                color: colorScheme.onSurface.withAlpha(15),
                 shape: BoxShape.circle,
               ),
               child: SvgPicture.asset(
@@ -260,7 +518,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 32,
                 height: 32,
                 colorFilter: ColorFilter.mode(
-                  colorScheme.primary,
+                  colorScheme.onSurface.withAlpha(180),
                   BlendMode.srcIn,
                 ),
               ),
@@ -375,7 +633,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: 28,
                       height: 28,
                       colorFilter: ColorFilter.mode(
-                        colorScheme.primary,
+                        colorScheme.onSurface,
                         BlendMode.srcIn,
                       ),
                     ),
@@ -400,8 +658,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        colorScheme.primary,
-                        colorScheme.primary.withAlpha(180),
+                        colorScheme.onSurface.withAlpha(40),
+                        colorScheme.onSurface.withAlpha(25),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(16),
@@ -527,6 +785,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // Leere Serien ausblenden
                 _buildEmptySeriesSection(colorScheme, xtreamService),
+
+                const SizedBox(height: 24),
+
+                // Spracheinstellungen
+                _buildLanguageSection(colorScheme, xtreamService),
 
                 const SizedBox(height: 24),
 
@@ -663,7 +926,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: GoogleFonts.poppins(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: colorScheme.primary,
+              color: colorScheme.onSurface.withAlpha(150),
               letterSpacing: 0.5,
             ),
           ),
@@ -705,7 +968,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: colorScheme.primary.withAlpha(25),
+                                color: colorScheme.onSurface.withAlpha(15),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: SvgPicture.asset(
@@ -713,7 +976,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 width: 20,
                                 height: 20,
                                 colorFilter: ColorFilter.mode(
-                                  colorScheme.primary,
+                                  colorScheme.onSurface.withAlpha(180),
                                   BlendMode.srcIn,
                                 ),
                               ),
@@ -786,5 +1049,113 @@ class _SettingsItem {
     required this.subtitle,
     this.onTap,
   });
+}
+
+class _LanguageOption extends StatelessWidget {
+  final String? code;
+  final String name;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _LanguageOption({
+    required this.code,
+    required this.name,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? colorScheme.onSurface.withAlpha(15) : null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              // Language code badge
+              if (code != null)
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.onSurface.withAlpha(30)
+                        : colorScheme.onSurface.withAlpha(15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      code!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface.withAlpha(isSelected ? 255 : 180),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.onSurface.withAlpha(30)
+                        : colorScheme.onSurface.withAlpha(15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: SvgPicture.asset(
+                      'assets/icons/globe.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(isSelected ? 255 : 150),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+
+              const SizedBox(width: 14),
+
+              // Language name
+              Expanded(
+                child: Text(
+                  name,
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: colorScheme.onSurface.withAlpha(isSelected ? 255 : 200),
+                  ),
+                ),
+              ),
+
+              // Checkmark
+              if (isSelected)
+                SvgPicture.asset(
+                  'assets/icons/check.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: ColorFilter.mode(
+                    colorScheme.onSurface,
+                    BlendMode.srcIn,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 

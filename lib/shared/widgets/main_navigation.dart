@@ -25,25 +25,25 @@ class _MainNavigationState extends State<MainNavigation>
 
   static const List<String> _tabLabels = [
     'Start',
-    'Live',
     'Filme',
     'Serien',
+    'Live',
     'Profil',
   ];
 
   static const List<String> _tabIcons = [
-    'assets/icons/house.svg',
-    'assets/icons/broadcast.svg',
+    'assets/icons/house-simple.svg',
     'assets/icons/film-strip.svg',
     'assets/icons/monitor-play.svg',
+    'assets/icons/broadcast.svg',
     'assets/icons/user.svg',
   ];
 
   static const List<Widget> _screens = [
     StartScreen(),
-    LiveTvScreen(),
     MoviesScreen(),
     SeriesScreen(),
+    LiveTvScreen(),
     ProfileScreen(),
   ];
 
@@ -106,7 +106,7 @@ class _MainNavigationState extends State<MainNavigation>
   Widget _buildTabIcon(int index, bool isActive) {
     final colorScheme = Theme.of(context).colorScheme;
     final iconColor = isActive
-        ? colorScheme.primary
+        ? colorScheme.onSurface
         : colorScheme.onSurface.withAlpha(100);
 
     return AnimatedContainer(
@@ -191,7 +191,7 @@ class _MainNavigationState extends State<MainNavigation>
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               color: isSelected
-                                  ? colorScheme.primary
+                                  ? colorScheme.onSurface
                                   : colorScheme.onSurface.withAlpha(150),
                               fontWeight:
                                   isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -204,7 +204,7 @@ class _MainNavigationState extends State<MainNavigation>
                             height: 2,
                             width: isSelected ? 36 : 0,
                             decoration: BoxDecoration(
-                              color: colorScheme.primary,
+                              color: colorScheme.onSurface,
                               borderRadius: BorderRadius.circular(1),
                             ),
                           ),
@@ -248,7 +248,7 @@ class _MainNavigationState extends State<MainNavigation>
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: _selectedIndex == 4
-                        ? colorScheme.primary.withAlpha(25)
+                        ? colorScheme.onSurface.withAlpha(15)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -258,7 +258,7 @@ class _MainNavigationState extends State<MainNavigation>
                     height: 24,
                     colorFilter: ColorFilter.mode(
                       _selectedIndex == 4
-                          ? colorScheme.primary
+                          ? colorScheme.onSurface
                           : colorScheme.onSurface.withAlpha(150),
                       BlendMode.srcIn,
                     ),
@@ -313,10 +313,10 @@ class _MainNavigationState extends State<MainNavigation>
                         height: 2,
                         width: screenWidth / 5,
                         decoration: BoxDecoration(
-                          color: colorScheme.primary,
+                          color: colorScheme.onSurface,
                           boxShadow: [
                             BoxShadow(
-                              color: colorScheme.primary.withAlpha(75),
+                              color: colorScheme.onSurface.withAlpha(50),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -355,7 +355,7 @@ class _MainNavigationState extends State<MainNavigation>
                                     _tabLabels[index],
                                     style: GoogleFonts.poppins(
                                       fontSize: 10,
-                                      color: colorScheme.primary,
+                                      color: colorScheme.onSurface,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),

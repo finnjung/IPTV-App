@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
+import '../utils/content_parser.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 
@@ -80,11 +81,12 @@ class _SearchScreenState extends State<SearchScreen> {
     );
 
     if (url != null) {
+      final metadata = ContentParser.parse(movie.name ?? 'Film');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            title: movie.name ?? 'Film',
+            title: metadata.cleanName,
             subtitle: movie.year,
             streamUrl: url,
           ),
@@ -107,11 +109,12 @@ class _SearchScreenState extends State<SearchScreen> {
     final url = xtreamService.getLiveStreamUrl(stream);
 
     if (url != null) {
+      final metadata = ContentParser.parse(stream.name ?? 'Live TV');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            title: stream.name ?? 'Live TV',
+            title: metadata.cleanName,
             subtitle: null,
             streamUrl: url,
           ),
@@ -366,7 +369,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 width: 20,
                 height: 20,
                 colorFilter: ColorFilter.mode(
-                  colorScheme.primary,
+                  colorScheme.onSurface.withAlpha(150),
                   BlendMode.srcIn,
                 ),
               ),
@@ -383,7 +386,7 @@ class _SearchScreenState extends State<SearchScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: colorScheme.primary.withAlpha(25),
+                  color: colorScheme.onSurface.withAlpha(15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -391,7 +394,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: colorScheme.primary,
+                    color: colorScheme.onSurface.withAlpha(180),
                   ),
                 ),
               ),

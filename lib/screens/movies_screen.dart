@@ -5,7 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
-import '../widgets/category_chip.dart';
+import '../models/watch_progress.dart';
+import '../utils/content_parser.dart';
 import 'player_screen.dart';
 import 'search_screen.dart';
 
@@ -17,7 +18,6 @@ class MoviesScreen extends StatefulWidget {
 }
 
 class _MoviesScreenState extends State<MoviesScreen> {
-  int _selectedCategoryIndex = 0;
   List<XTremeCodeVodItem> _movies = [];
   bool _isLoading = true;
 
@@ -37,14 +37,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
 
     setState(() => _isLoading = true);
 
-    XTremeCodeCategory? category;
-    if (_selectedCategoryIndex > 0 &&
-        xtreamService.vodCategories != null &&
-        _selectedCategoryIndex <= xtreamService.vodCategories!.length) {
-      category = xtreamService.vodCategories![_selectedCategoryIndex - 1];
-    }
-
-    final movies = await xtreamService.getMovies(category: category);
+    final movies = await xtreamService.getMovies();
 
     if (mounted) {
       setState(() {
@@ -62,13 +55,17 @@ class _MoviesScreenState extends State<MoviesScreen> {
     );
 
     if (url != null) {
+      final metadata = ContentParser.parse(movie.name ?? 'Film');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            title: movie.name ?? 'Film',
+            title: metadata.cleanName,
             subtitle: movie.year,
             streamUrl: url,
+            contentId: 'movie_${movie.streamId}',
+            imageUrl: movie.streamIcon,
+            contentType: ContentType.movie,
           ),
         ),
       );
@@ -79,14 +76,6 @@ class _MoviesScreenState extends State<MoviesScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-
-    final categories = ['Alle'];
-    if (xtreamService.vodCategories != null) {
-      categories.addAll(
-        xtreamService.vodCategories!
-            .map((c) => c.categoryName ?? 'Unbekannt'),
-      );
-    }
 
     return Scaffold(
       body: SafeArea(
@@ -108,7 +97,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                                 width: 28,
                                 height: 28,
                                 colorFilter: ColorFilter.mode(
-                                  colorScheme.primary,
+                                  colorScheme.onSurface,
                                   BlendMode.srcIn,
                                 ),
                               ),
@@ -161,31 +150,6 @@ class _MoviesScreenState extends State<MoviesScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-
-                  // Category Filter
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 44,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: categories.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 10),
-                            child: CategoryChip(
-                              label: categories[index],
-                              isSelected: _selectedCategoryIndex == index,
-                              onTap: () {
-                                setState(() => _selectedCategoryIndex = index);
-                                _loadMovies();
-                              },
-                            ),
-                          );
-                        },
                       ),
                     ),
                   ),
@@ -277,7 +241,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.primary.withAlpha(25),
+                color: colorScheme.onSurface.withAlpha(15),
                 shape: BoxShape.circle,
               ),
               child: SvgPicture.asset(
@@ -285,7 +249,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                 width: 48,
                 height: 48,
                 colorFilter: ColorFilter.mode(
-                  colorScheme.primary,
+                  colorScheme.onSurface.withAlpha(150),
                   BlendMode.srcIn,
                 ),
               ),

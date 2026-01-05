@@ -5,17 +5,26 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:provider/provider.dart';
+import '../models/watch_progress.dart';
+import '../services/xtream_service.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String title;
   final String? subtitle;
   final String streamUrl;
+  final String? contentId; // Für Watch-Progress
+  final String? imageUrl;
+  final ContentType contentType;
 
   const PlayerScreen({
     super.key,
     required this.title,
     this.subtitle,
     required this.streamUrl,
+    this.contentId,
+    this.imageUrl,
+    this.contentType = ContentType.movie,
   });
 
   @override
@@ -41,6 +50,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Animation Controllers
   late AnimationController _skipLeftController;
   late AnimationController _skipRightController;
+
+  // Watch Progress
+  Timer? _saveProgressTimer;
+  WatchProgress? _existingProgress;
+  bool _hasShownResumeDialog = false;
+  late XtreamService _xtreamService;
 
   @override
   void initState() {
@@ -68,7 +83,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     _player = Player();
     _controller = VideoController(_player);
 
+    // Cache the service for later use in dispose
+    _xtreamService = context.read<XtreamService>();
+
+    // Check for existing progress
+    _checkExistingProgress();
+
     _initPlayer();
+  }
+
+  void _checkExistingProgress() {
+    if (widget.contentId == null) return;
+    _existingProgress = _xtreamService.getWatchProgress(widget.contentId!);
   }
 
   Future<void> _initPlayer() async {
@@ -92,6 +118,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             if (playing) {
               _isLoading = false;
               _startHideControlsTimer();
+              _startSaveProgressTimer();
+
+              // Show resume dialog once when video starts
+              if (!_hasShownResumeDialog && _existingProgress != null) {
+                _hasShownResumeDialog = true;
+                _showResumeDialog();
+              }
             } else {
               _cancelHideControlsTimer();
               _showControls();
@@ -118,11 +151,127 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _startSaveProgressTimer() {
+    _saveProgressTimer?.cancel();
+    // Save progress every 10 seconds
+    _saveProgressTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _saveCurrentProgress();
+    });
+  }
+
+  Future<void> _saveCurrentProgress() async {
+    if (widget.contentId == null) return;
+
+    final position = _player.state.position;
+    final duration = _player.state.duration;
+
+    // Don't save if duration is unknown or too short
+    if (duration.inSeconds < 60) return;
+
+    final progress = WatchProgress(
+      id: widget.contentId!,
+      title: widget.title,
+      subtitle: widget.subtitle,
+      streamUrl: widget.streamUrl,
+      imageUrl: widget.imageUrl,
+      contentType: widget.contentType,
+      position: position,
+      duration: duration,
+      lastWatched: DateTime.now(),
+    );
+
+    await _xtreamService.updateWatchProgress(progress);
+  }
+
+  void _saveFinalProgress() {
+    if (widget.contentId == null) return;
+
+    final position = _player.state.position;
+    final duration = _player.state.duration;
+
+    // Don't save if duration is unknown or too short
+    if (duration.inSeconds < 60) return;
+
+    final progress = WatchProgress(
+      id: widget.contentId!,
+      title: widget.title,
+      subtitle: widget.subtitle,
+      streamUrl: widget.streamUrl,
+      imageUrl: widget.imageUrl,
+      contentType: widget.contentType,
+      position: position,
+      duration: duration,
+      lastWatched: DateTime.now(),
+    );
+
+    // Fire and forget - no await needed
+    _xtreamService.updateWatchProgress(progress);
+  }
+
+  void _showResumeDialog() {
+    if (_existingProgress == null) return;
+
+    _player.pause();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Weiterschauen?',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Du hast diesen Inhalt bei ${_existingProgress!.formattedPosition} angehalten.\n${_existingProgress!.remainingTime}',
+          style: GoogleFonts.poppins(
+            color: Colors.white70,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _player.play();
+            },
+            child: Text(
+              'Von vorne',
+              style: GoogleFonts.poppins(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _player.seek(_existingProgress!.position);
+              _player.play();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+            child: Text(
+              'Fortsetzen',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _saveProgressTimer?.cancel();
     _skipLeftController.dispose();
     _skipRightController.dispose();
+
+    // Save final progress before closing (fire and forget)
+    _saveFinalProgress();
+
     _player.dispose();
 
     // Restore orientation

@@ -83,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: colorScheme.primary.withAlpha(25),
+                          color: colorScheme.onSurface.withAlpha(15),
                           shape: BoxShape.circle,
                         ),
                         child: SvgPicture.asset(
@@ -91,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 48,
                           height: 48,
                           colorFilter: ColorFilter.mode(
-                            colorScheme.primary,
+                            colorScheme.onSurface,
                             BlendMode.srcIn,
                           ),
                         ),
@@ -344,8 +344,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onChanged: (value) {
                                     setState(() => _useCorsProxy = value);
                                   },
-                                  activeTrackColor: colorScheme.primary.withAlpha(150),
-                                  activeThumbColor: colorScheme.primary,
+                                  activeTrackColor: colorScheme.onSurface.withAlpha(100),
+                                  activeThumbColor: colorScheme.onSurface,
                                 ),
                               ],
                             ),
@@ -445,7 +445,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: 20,
                         height: 20,
                         colorFilter: ColorFilter.mode(
-                          colorScheme.primary,
+                          colorScheme.onSurface.withAlpha(150),
                           BlendMode.srcIn,
                         ),
                       ),

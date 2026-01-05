@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Primary brand color - ein elegantes Blau/Türkis für IPTV
-  static const Color primaryColor = Color(0xFF4A90A4);
-  static const Color secondaryColor = Color(0xFF26A69A);
+  // Primary brand color - Crimson für Premium Entertainment
+  static const Color primaryColor = Color(0xFFE53935);
+  static const Color secondaryColor = Color(0xFFFF5722);
 
   // Dark theme colors
   static const Color backgroundDark = Color(0xFF0F0F0F);

@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
-import '../widgets/category_chip.dart';
 import 'series_detail_screen.dart';
 import 'search_screen.dart';
 
@@ -17,7 +16,6 @@ class SeriesScreen extends StatefulWidget {
 }
 
 class _SeriesScreenState extends State<SeriesScreen> {
-  int _selectedCategoryIndex = 0;
   List<XTremeCodeSeriesItem> _series = [];
   bool _isLoading = true;
 
@@ -37,14 +35,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
 
     setState(() => _isLoading = true);
 
-    XTremeCodeCategory? category;
-    if (_selectedCategoryIndex > 0 &&
-        xtreamService.seriesCategories != null &&
-        _selectedCategoryIndex <= xtreamService.seriesCategories!.length) {
-      category = xtreamService.seriesCategories![_selectedCategoryIndex - 1];
-    }
-
-    final series = await xtreamService.getSeries(category: category);
+    final series = await xtreamService.getSeries();
 
     if (mounted) {
       setState(() {
@@ -68,14 +59,6 @@ class _SeriesScreenState extends State<SeriesScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
 
-    final categories = ['Alle'];
-    if (xtreamService.seriesCategories != null) {
-      categories.addAll(
-        xtreamService.seriesCategories!
-            .map((c) => c.categoryName ?? 'Unbekannt'),
-      );
-    }
-
     return Scaffold(
       body: SafeArea(
         child: !xtreamService.isConnected
@@ -96,7 +79,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
                                 width: 28,
                                 height: 28,
                                 colorFilter: ColorFilter.mode(
-                                  colorScheme.primary,
+                                  colorScheme.onSurface,
                                   BlendMode.srcIn,
                                 ),
                               ),
@@ -149,32 +132,6 @@ class _SeriesScreenState extends State<SeriesScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-
-                  // Category Filter
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 44,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: categories.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 10),
-                            child: CategoryChip(
-                              label: categories[index],
-                              isSelected: _selectedCategoryIndex == index,
-                              onTap: () {
-                                setState(
-                                    () => _selectedCategoryIndex = index);
-                                _loadSeries();
-                              },
-                            ),
-                          );
-                        },
                       ),
                     ),
                   ),
@@ -266,7 +223,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.primary.withAlpha(25),
+                color: colorScheme.onSurface.withAlpha(15),
                 shape: BoxShape.circle,
               ),
               child: SvgPicture.asset(
@@ -274,7 +231,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
                 width: 48,
                 height: 48,
                 colorFilter: ColorFilter.mode(
-                  colorScheme.primary,
+                  colorScheme.onSurface.withAlpha(150),
                   BlendMode.srcIn,
                 ),
               ),

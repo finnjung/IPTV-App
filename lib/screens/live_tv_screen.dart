@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
-import '../widgets/category_chip.dart';
+import '../utils/content_parser.dart';
 import 'player_screen.dart';
 import 'search_screen.dart';
 
@@ -17,7 +17,6 @@ class LiveTvScreen extends StatefulWidget {
 }
 
 class _LiveTvScreenState extends State<LiveTvScreen> {
-  int _selectedCategoryIndex = 0;
   List<XTremeCodeLiveStreamItem> _streams = [];
   bool _isLoading = true;
 
@@ -37,14 +36,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
 
     setState(() => _isLoading = true);
 
-    XTremeCodeCategory? category;
-    if (_selectedCategoryIndex > 0 &&
-        xtreamService.liveCategories != null &&
-        _selectedCategoryIndex <= xtreamService.liveCategories!.length) {
-      category = xtreamService.liveCategories![_selectedCategoryIndex - 1];
-    }
-
-    final streams = await xtreamService.getLiveStreams(category: category);
+    final streams = await xtreamService.getLiveStreams();
 
     if (mounted) {
       setState(() {
@@ -59,11 +51,12 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
     final url = xtreamService.getLiveStreamUrl(stream);
 
     if (url != null) {
+      final metadata = ContentParser.parse(stream.name ?? 'Live TV');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            title: stream.name ?? 'Live TV',
+            title: metadata.cleanName,
             subtitle: null,
             streamUrl: url,
           ),
@@ -76,14 +69,6 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-
-    final categories = ['Alle'];
-    if (xtreamService.liveCategories != null) {
-      categories.addAll(
-        xtreamService.liveCategories!
-            .map((c) => c.categoryName ?? 'Unbekannt'),
-      );
-    }
 
     return Scaffold(
       body: SafeArea(
@@ -105,7 +90,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                                 width: 28,
                                 height: 28,
                                 colorFilter: ColorFilter.mode(
-                                  colorScheme.primary,
+                                  colorScheme.onSurface,
                                   BlendMode.srcIn,
                                 ),
                               ),
@@ -158,31 +143,6 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ),
-
-                  // Category Filter
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 44,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: categories.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 10),
-                            child: CategoryChip(
-                              label: categories[index],
-                              isSelected: _selectedCategoryIndex == index,
-                              onTap: () {
-                                setState(() => _selectedCategoryIndex = index);
-                                _loadStreams();
-                              },
-                            ),
-                          );
-                        },
                       ),
                     ),
                   ),
@@ -275,7 +235,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.primary.withAlpha(25),
+                color: colorScheme.onSurface.withAlpha(15),
                 shape: BoxShape.circle,
               ),
               child: SvgPicture.asset(
@@ -283,7 +243,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 width: 48,
                 height: 48,
                 colorFilter: ColorFilter.mode(
-                  colorScheme.primary,
+                  colorScheme.onSurface.withAlpha(150),
                   BlendMode.srcIn,
                 ),
               ),

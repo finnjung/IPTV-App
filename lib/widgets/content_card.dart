@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../utils/content_parser.dart';
 
 class ContentCard extends StatelessWidget {
   final String title;
@@ -30,6 +31,9 @@ class ContentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Parse metadata from title
+    final metadata = ContentParser.parse(title);
 
     return GestureDetector(
       onTap: onTap,
@@ -98,7 +102,7 @@ class ContentCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      title,
+                      metadata.cleanName,
                       style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: isCompact ? 12 : 14,
@@ -147,6 +151,90 @@ class ContentCard extends StatelessWidget {
                   ),
                 ),
 
+              // Badges (Popular + Quality + Year + Language)
+              if ((metadata.isPopular || metadata.quality != null || metadata.year != null || metadata.language != null) && !isLive)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  right: 8,
+                  child: Row(
+                    children: [
+                      if (metadata.isPopular)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: SvgPicture.asset(
+                            'assets/icons/flame.svg',
+                            width: 12,
+                            height: 12,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      if (metadata.quality != null) ...[
+                        if (metadata.isPopular) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      // Jahr Badge (rechts)
+                      if (metadata.year != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.year.toString(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      // Sprache Badge (rechts neben Jahr)
+                      if (metadata.language != null) ...[
+                        if (metadata.year != null) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withAlpha(180),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.language!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
               // Live Badge - sanfte Animation
               if (isLive)
                 Positioned(
@@ -170,7 +258,7 @@ class ContentCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            colorScheme.primary.withAlpha(40),
+            colorScheme.onSurface.withAlpha(20),
             colorScheme.surface,
           ],
         ),

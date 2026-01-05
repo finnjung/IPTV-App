@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
+import '../models/watch_progress.dart';
+import '../utils/content_parser.dart';
 import 'player_screen.dart';
 
 class SeriesDetailScreen extends StatefulWidget {
@@ -55,7 +57,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return '${date.day}.${date.month}.${date.year}';
   }
 
-  void _playEpisode(XTremeCodeEpisode episode) {
+  void _playEpisode(XTremeCodeEpisode episode, int seasonNum) {
     final xtreamService = context.read<XtreamService>();
     final url = xtreamService.getSeriesEpisodeUrl(
       episode.id ?? 0,
@@ -63,13 +65,17 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     );
 
     if (url != null) {
+      final metadata = ContentParser.parse(widget.series.name ?? 'Serie');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            title: widget.series.name ?? 'Serie',
-            subtitle: episode.title ?? 'Episode',
+            title: metadata.cleanName,
+            subtitle: 'S$seasonNum E${episode.episodeNum ?? 1}: ${episode.title ?? "Episode"}',
             streamUrl: url,
+            contentId: 'series_${widget.series.seriesId}_${seasonNum}_${episode.episodeNum ?? 1}',
+            imageUrl: episode.info.movieImage ?? widget.series.cover,
+            contentType: ContentType.series,
           ),
         ),
       );
@@ -147,7 +153,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.series.name ?? 'Unbekannt',
+                          ContentParser.parse(widget.series.name ?? 'Unbekannt').cleanName,
                           style: GoogleFonts.poppins(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
@@ -172,7 +178,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                                 '${_seriesInfo!.seasons!.length} Staffeln',
                                 style: GoogleFonts.poppins(
                                   fontSize: 14,
-                                  color: colorScheme.primary,
+                                  color: colorScheme.onSurface.withAlpha(150),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -221,12 +227,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? colorScheme.primary
+                                      ? colorScheme.onSurface
                                       : colorScheme.surface,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: isSelected
-                                        ? colorScheme.primary
+                                        ? colorScheme.onSurface
                                         : colorScheme.outline.withAlpha(50),
                                   ),
                                 ),
@@ -238,7 +244,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                                         ? FontWeight.w600
                                         : FontWeight.w500,
                                     color: isSelected
-                                        ? Colors.white
+                                        ? colorScheme.surface
                                         : colorScheme.onSurface.withAlpha(180),
                                   ),
                                 ),
@@ -350,7 +356,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => _playEpisode(episode),
+                  onTap: () => _playEpisode(episode, seasonNumber ?? 1),
                   borderRadius: BorderRadius.circular(14),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -383,7 +389,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                                 'Episode ${episode.episodeNum ?? (index + 1)}',
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
-                                  color: colorScheme.primary,
+                                  color: colorScheme.onSurface.withAlpha(150),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -416,7 +422,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: colorScheme.primary.withAlpha(25),
+                            color: colorScheme.onSurface.withAlpha(15),
                             shape: BoxShape.circle,
                           ),
                           child: SvgPicture.asset(
@@ -424,7 +430,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             width: 18,
                             height: 18,
                             colorFilter: ColorFilter.mode(
-                              colorScheme.primary,
+                              colorScheme.onSurface,
                               BlendMode.srcIn,
                             ),
                           ),
