@@ -347,95 +347,110 @@ class _MovieCard extends StatelessWidget {
       child: Container(
         width: 130,
         decoration: BoxDecoration(
-          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: colorScheme.outline.withAlpha(25),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Poster
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 140,
-                    width: double.infinity,
-                    color: colorScheme.onSurface.withAlpha(10),
-                    child: movie.streamIcon != null
-                        ? CachedNetworkImage(
-                            imageUrl: movie.streamIcon!,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                          )
-                        : _buildPlaceholder(colorScheme),
-                  ),
-                  // Tags
-                  if (metadata.isPopular || metadata.quality != null)
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Row(
-                        children: [
-                          if (metadata.isPopular)
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: SvgPicture.asset(
-                                'assets/icons/flame.svg',
-                                width: 12,
-                                height: 12,
-                                colorFilter: const ColorFilter.mode(
-                                  Colors.white,
-                                  BlendMode.srcIn,
-                                ),
-                              ),
-                            ),
-                          if (metadata.quality != null) ...[
-                            if (metadata.isPopular) const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                metadata.quality!,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Title
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                metadata.cleanName,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurface,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            children: [
+              // Full-size image
+              Positioned.fill(
+                child: Container(
+                  color: colorScheme.onSurface.withAlpha(10),
+                  child: movie.streamIcon != null
+                      ? CachedNetworkImage(
+                          imageUrl: movie.streamIcon!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                        )
+                      : _buildPlaceholder(colorScheme),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+              // Gradient overlay
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withAlpha(100),
+                        Colors.black.withAlpha(200),
+                        Colors.black.withAlpha(230),
+                      ],
+                      stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Tags
+              if (metadata.isPopular || metadata.quality != null)
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Row(
+                    children: [
+                      if (metadata.isPopular)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: SvgPicture.asset(
+                            'assets/icons/flame.svg',
+                            width: 12,
+                            height: 12,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      if (metadata.quality != null) ...[
+                        if (metadata.isPopular) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              // Title at bottom
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Text(
+                  metadata.cleanName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -478,95 +493,110 @@ class _SeriesCard extends StatelessWidget {
       child: Container(
         width: 130,
         decoration: BoxDecoration(
-          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: colorScheme.outline.withAlpha(25),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Poster
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 140,
-                    width: double.infinity,
-                    color: colorScheme.onSurface.withAlpha(10),
-                    child: series.cover != null
-                        ? CachedNetworkImage(
-                            imageUrl: series.cover!,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                          )
-                        : _buildPlaceholder(colorScheme),
-                  ),
-                  // Tags
-                  if (metadata.isPopular || metadata.quality != null)
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Row(
-                        children: [
-                          if (metadata.isPopular)
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: SvgPicture.asset(
-                                'assets/icons/flame.svg',
-                                width: 12,
-                                height: 12,
-                                colorFilter: const ColorFilter.mode(
-                                  Colors.white,
-                                  BlendMode.srcIn,
-                                ),
-                              ),
-                            ),
-                          if (metadata.quality != null) ...[
-                            if (metadata.isPopular) const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                metadata.quality!,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Title
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                metadata.cleanName,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurface,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            children: [
+              // Full-size image
+              Positioned.fill(
+                child: Container(
+                  color: colorScheme.onSurface.withAlpha(10),
+                  child: series.cover != null
+                      ? CachedNetworkImage(
+                          imageUrl: series.cover!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                        )
+                      : _buildPlaceholder(colorScheme),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+              // Gradient overlay
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withAlpha(100),
+                        Colors.black.withAlpha(200),
+                        Colors.black.withAlpha(230),
+                      ],
+                      stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Tags
+              if (metadata.isPopular || metadata.quality != null)
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Row(
+                    children: [
+                      if (metadata.isPopular)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: SvgPicture.asset(
+                            'assets/icons/flame.svg',
+                            width: 12,
+                            height: 12,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      if (metadata.quality != null) ...[
+                        if (metadata.isPopular) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              // Title at bottom
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Text(
+                  metadata.cleanName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -617,119 +647,134 @@ class _ContinueWatchingCard extends StatelessWidget {
       child: Container(
         width: 260,
         decoration: BoxDecoration(
-          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: colorScheme.outline.withAlpha(25),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Thumbnail
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 100,
-                    width: double.infinity,
-                    color: colorScheme.surface,
-                    child: item.imageUrl != null
-                        ? CachedNetworkImage(
-                            imageUrl: item.imageUrl!,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                          )
-                        : _buildPlaceholder(colorScheme),
-                  ),
-                  // Play Button Overlay
-                  Positioned.fill(
-                    child: Container(
-                      color: Colors.black26,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/play.svg',
-                            width: 24,
-                            height: 24,
-                            colorFilter: const ColorFilter.mode(
-                              Colors.white,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Progress Bar
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: LinearProgressIndicator(
-                      value: item.progress,
-                      backgroundColor: Colors.black38,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        colorScheme.primary,
-                      ),
-                      minHeight: 3,
-                    ),
-                  ),
-                ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Stack(
+            children: [
+              // Full-size image
+              Positioned.fill(
+                child: Container(
+                  color: colorScheme.onSurface.withAlpha(10),
+                  child: item.imageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: item.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                        )
+                      : _buildPlaceholder(colorScheme),
+                ),
               ),
-            ),
-            // Info
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    cleanTitle,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      if (item.subtitle != null) ...[
-                        Expanded(
-                          child: Text(
-                            item.subtitle!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: colorScheme.onSurface.withAlpha(120),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
+              // Gradient overlay
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withAlpha(80),
+                        Colors.black.withAlpha(180),
+                        Colors.black.withAlpha(220),
                       ],
-                      Text(
-                        item.remainingTime,
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: colorScheme.onSurface.withAlpha(100),
-                        ),
-                      ),
-                    ],
+                      stops: const [0.0, 0.4, 0.7, 1.0],
+                    ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+              // Play Button
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 60,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withAlpha(120),
+                      shape: BoxShape.circle,
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/play.svg',
+                      width: 24,
+                      height: 24,
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Info at bottom
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cleanTitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (item.subtitle != null) ...[
+                          Expanded(
+                            child: Text(
+                              item.subtitle!,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.white.withAlpha(180),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          item.remainingTime,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.white.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Progress Bar
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: LinearProgressIndicator(
+                  value: item.progress,
+                  backgroundColor: Colors.black38,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    colorScheme.primary,
+                  ),
+                  minHeight: 3,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -737,7 +782,7 @@ class _ContinueWatchingCard extends StatelessWidget {
 
   Widget _buildPlaceholder(ColorScheme colorScheme) {
     return Container(
-      color: colorScheme.surface,
+      color: colorScheme.onSurface.withAlpha(10),
       child: Center(
         child: SvgPicture.asset(
           item.contentType == ContentType.movie

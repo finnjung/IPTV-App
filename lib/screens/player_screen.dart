@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -6,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import '../models/watch_progress.dart';
 import '../services/xtream_service.dart';
 
@@ -41,15 +44,21 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _isPaused = false;
   Timer? _hideControlsTimer;
 
-  // Für Doppeltippen
-  DateTime? _lastTapLeft;
-  DateTime? _lastTapRight;
+  // Skip-Animation
   bool _showSkipLeft = false;
   bool _showSkipRight = false;
+
+  // Pause-Titel Animation (verzögert nach 3 Sekunden)
+  bool _showPauseTitle = false;
+  Timer? _pauseTitleTimer;
+
+  // Fullscreen (Desktop)
+  bool _isFullscreen = false;
 
   // Animation Controllers
   late AnimationController _skipLeftController;
   late AnimationController _skipRightController;
+  late AnimationController _pauseTitleController;
 
   // Watch Progress
   Timer? _saveProgressTimer;
@@ -70,6 +79,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
+    _pauseTitleController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
 
     // Set landscape orientation for video
     SystemChrome.setPreferredOrientations([
@@ -88,6 +101,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     // Check for existing progress
     _checkExistingProgress();
+
+    // Check fullscreen status on desktop
+    _checkFullscreenStatus();
 
     _initPlayer();
   }
@@ -120,6 +136,11 @@ class _PlayerScreenState extends State<PlayerScreen>
               _startHideControlsTimer();
               _startSaveProgressTimer();
 
+              // Cancel pause title animation
+              _pauseTitleTimer?.cancel();
+              _showPauseTitle = false;
+              _pauseTitleController.reset();
+
               // Show resume dialog once when video starts
               if (!_hasShownResumeDialog && _existingProgress != null) {
                 _hasShownResumeDialog = true;
@@ -128,6 +149,15 @@ class _PlayerScreenState extends State<PlayerScreen>
             } else {
               _cancelHideControlsTimer();
               _showControls();
+
+              // Start pause title timer (3 seconds delay)
+              _pauseTitleTimer?.cancel();
+              _pauseTitleTimer = Timer(const Duration(seconds: 3), () {
+                if (mounted && _isPaused) {
+                  setState(() => _showPauseTitle = true);
+                  _pauseTitleController.forward();
+                }
+              });
             }
           });
         }
@@ -250,7 +280,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               _player.play();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
             ),
             child: Text(
               'Fortsetzen',
@@ -266,8 +297,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   void dispose() {
     _hideControlsTimer?.cancel();
     _saveProgressTimer?.cancel();
+    _pauseTitleTimer?.cancel();
     _skipLeftController.dispose();
     _skipRightController.dispose();
+    _pauseTitleController.dispose();
 
     // Save final progress before closing (fire and forget)
     _saveFinalProgress();
@@ -307,50 +340,43 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  void _toggleControls() {
-    if (_controlsVisible) {
-      setState(() => _controlsVisible = false);
-      _cancelHideControlsTimer();
-    } else {
-      _showControls();
+  Future<void> _toggleFullscreen() async {
+    // Nur auf Desktop (nicht Web, nicht Mobile)
+    if (kIsWeb) return;
+    if (!Platform.isMacOS && !Platform.isWindows && !Platform.isLinux) return;
+
+    try {
+      final isCurrentlyFullscreen = await windowManager.isFullScreen();
+      await windowManager.setFullScreen(!isCurrentlyFullscreen);
+      if (mounted) {
+        setState(() => _isFullscreen = !isCurrentlyFullscreen);
+      }
+    } catch (e) {
+      debugPrint('Fullscreen toggle error: $e');
     }
   }
 
-  void _handleTapLeft() {
-    final now = DateTime.now();
-    if (_lastTapLeft != null &&
-        now.difference(_lastTapLeft!).inMilliseconds < 300) {
-      // Doppeltippen erkannt - 10 Sekunden zurück
-      _skipBackward();
-      _lastTapLeft = null;
-    } else {
-      _lastTapLeft = now;
-      // Nach kurzer Zeit Controls togglen wenn kein zweiter Tap
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (_lastTapLeft != null) {
-          _toggleControls();
-          _lastTapLeft = null;
-        }
-      });
+  Future<void> _checkFullscreenStatus() async {
+    if (kIsWeb) return;
+    if (!Platform.isMacOS && !Platform.isWindows && !Platform.isLinux) return;
+
+    try {
+      await windowManager.ensureInitialized();
+      final isFullscreen = await windowManager.isFullScreen();
+      if (mounted) {
+        setState(() => _isFullscreen = isFullscreen);
+      }
+    } catch (e) {
+      debugPrint('Fullscreen check error: $e');
     }
   }
 
-  void _handleTapRight() {
-    final now = DateTime.now();
-    if (_lastTapRight != null &&
-        now.difference(_lastTapRight!).inMilliseconds < 300) {
-      // Doppeltippen erkannt - 10 Sekunden vor
-      _skipForward();
-      _lastTapRight = null;
+  void _handleTapPlayPause() {
+    // Einfacher Tap = Play/Pause
+    if (_player.state.playing) {
+      _player.pause();
     } else {
-      _lastTapRight = now;
-      // Nach kurzer Zeit Controls togglen wenn kein zweiter Tap
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (_lastTapRight != null) {
-          _toggleControls();
-          _lastTapRight = null;
-        }
-      });
+      _player.play();
     }
   }
 
@@ -396,37 +422,44 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Video
-          Center(
-            child: Video(
-              controller: _controller,
-              controls: NoVideoControls,
+      body: MouseRegion(
+        onEnter: (_) => _showControls(),
+        onHover: (_) {
+          if (!_controlsVisible) _showControls();
+        },
+        child: Stack(
+          children: [
+            // Video
+            Center(
+              child: Video(
+                controller: _controller,
+                controls: NoVideoControls,
+              ),
             ),
-          ),
 
-          // Tap-Bereiche für Doppeltippen
-          Row(
-            children: [
-              // Linke Hälfte - Zurück
-              Expanded(
-                child: GestureDetector(
-                  onTap: _handleTapLeft,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(color: Colors.transparent),
+            // Tap zum Play/Pause - Doppeltap für Skip
+            Row(
+              children: [
+                // Linke Hälfte - Doppeltap = Zurück
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _handleTapPlayPause,
+                    onDoubleTap: _skipBackward,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(color: Colors.transparent),
+                  ),
                 ),
-              ),
-              // Rechte Hälfte - Vor
-              Expanded(
-                child: GestureDetector(
-                  onTap: _handleTapRight,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(color: Colors.transparent),
+                // Rechte Hälfte - Doppeltap = Vor
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _handleTapPlayPause,
+                    onDoubleTap: _skipForward,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(color: Colors.transparent),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
 
           // Skip-Animationen
           if (_showSkipLeft)
@@ -450,8 +483,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(
-                    color: colorScheme.primary,
+                  const CircularProgressIndicator(
+                    color: Colors.white,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -468,50 +501,55 @@ class _PlayerScreenState extends State<PlayerScreen>
           // Error
           if (_error != null) _buildErrorWidget(colorScheme),
 
-          // Großer Titel bei Pause (Netflix-Style)
-          if (_isPaused && !_isLoading && _error == null)
-            AnimatedOpacity(
-              opacity: _controlsVisible ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+          // Großer Titel bei Pause (nach 3 Sekunden mit Fade-In und Abdunkelung)
+          if (_showPauseTitle && _isPaused && !_isLoading && _error == null)
+            AnimatedBuilder(
+              animation: _pauseTitleController,
+              builder: (context, child) {
+                return Stack(
                   children: [
-                    Text(
-                      widget.title,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black.withAlpha(150),
-                            blurRadius: 20,
-                          ),
-                        ],
+                    // Dunkler Overlay
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withAlpha(
+                          (180 * _pauseTitleController.value).toInt(),
+                        ),
                       ),
-                      textAlign: TextAlign.center,
                     ),
-                    if (widget.subtitle != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.subtitle!,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white70,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withAlpha(150),
-                              blurRadius: 10,
+                    // Titel
+                    Center(
+                      child: Opacity(
+                        opacity: _pauseTitleController.value,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.title,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
+                            if (widget.subtitle != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                widget.subtitle!,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white70,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ],
-                ),
-              ),
+                );
+              },
             ),
 
           // Controls overlay
@@ -542,8 +580,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
                       const Spacer(),
 
-                      // Center controls (nur wenn nicht pausiert - dann ist der Titel dort)
-                      if (!_isPaused) _buildCenterControls(colorScheme),
+                      // Center controls (nicht beim Laden)
+                      if (!_isLoading) _buildCenterControls(colorScheme),
 
                       const Spacer(),
 
@@ -555,7 +593,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -696,6 +735,23 @@ class _PlayerScreenState extends State<PlayerScreen>
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          // Fullscreen toggle (nur auf Desktop)
+          if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux))
+            IconButton(
+              onPressed: _toggleFullscreen,
+              icon: SvgPicture.asset(
+                _isFullscreen
+                    ? 'assets/icons/corners-in.svg'
+                    : 'assets/icons/corners-out.svg',
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -722,39 +778,20 @@ class _PlayerScreenState extends State<PlayerScreen>
 
         const SizedBox(width: 32),
 
-        // Play/Pause
-        StreamBuilder<bool>(
-          stream: _player.stream.playing,
-          builder: (context, snapshot) {
-            final playing = snapshot.data ?? false;
-            return GestureDetector(
-              onTap: () {
-                if (playing) {
-                  _player.pause();
-                } else {
-                  _player.play();
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: SvgPicture.asset(
-                  playing
-                      ? 'assets/icons/pause.svg'
-                      : 'assets/icons/play.svg',
-                  width: 40,
-                  height: 40,
-                  colorFilter: const ColorFilter.mode(
-                    Colors.white,
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
-            );
-          },
+        // Play/Pause (nutzt _isPaused State statt Stream für korrektes Icon)
+        GestureDetector(
+          onTap: _handleTapPlayPause,
+          child: SvgPicture.asset(
+            _isPaused
+                ? 'assets/icons/play.svg'
+                : 'assets/icons/pause.svg',
+            width: 56,
+            height: 56,
+            colorFilter: const ColorFilter.mode(
+              Colors.white,
+              BlendMode.srcIn,
+            ),
+          ),
         ),
 
         const SizedBox(width: 32),
@@ -807,10 +844,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                           overlayShape: const RoundSliderOverlayShape(
                             overlayRadius: 16,
                           ),
-                          activeTrackColor: colorScheme.primary,
+                          activeTrackColor: Colors.white,
                           inactiveTrackColor: Colors.white.withAlpha(75),
-                          thumbColor: colorScheme.primary,
-                          overlayColor: colorScheme.primary.withAlpha(50),
+                          thumbColor: Colors.white,
+                          overlayColor: Colors.white.withAlpha(50),
                         ),
                         child: Slider(
                           value: progress.clamp(0.0, 1.0),
@@ -857,56 +894,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             },
           ),
 
-          const SizedBox(height: 8),
-
-          // Pause-Button unten (wenn pausiert)
-          if (_isPaused)
-            StreamBuilder<bool>(
-              stream: _player.stream.playing,
-              builder: (context, snapshot) {
-                final playing = snapshot.data ?? false;
-                return GestureDetector(
-                  onTap: () {
-                    if (playing) {
-                      _player.pause();
-                    } else {
-                      _player.play();
-                    }
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SvgPicture.asset(
-                          'assets/icons/play.svg',
-                          width: 24,
-                          height: 24,
-                          colorFilter: const ColorFilter.mode(
-                            Colors.white,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Fortsetzen',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
         ],
       ),
     );

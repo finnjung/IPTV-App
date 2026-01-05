@@ -52,7 +52,7 @@ class _StickyGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    final backgroundColor = colorScheme.surface;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
 
     return Container(
       decoration: BoxDecoration(
@@ -176,7 +176,7 @@ class _StickyStartHeaderDelegate extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     final colorScheme = Theme.of(context).colorScheme;
-    final backgroundColor = colorScheme.surface;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
 
     return Container(
       decoration: BoxDecoration(

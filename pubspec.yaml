@@ -54,6 +54,9 @@ dependencies:
   # Storage
   shared_preferences: ^2.3.3
 
+  # Window Management (Desktop Fullscreen)
+  window_manager: ^0.4.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -295,95 +295,110 @@ class _MovieCard extends StatelessWidget {
       child: Container(
         width: 130,
         decoration: BoxDecoration(
-          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: colorScheme.outline.withAlpha(25),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Poster
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 140,
-                    width: double.infinity,
-                    color: colorScheme.onSurface.withAlpha(10),
-                    child: movie.streamIcon != null
-                        ? CachedNetworkImage(
-                            imageUrl: movie.streamIcon!,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                          )
-                        : _buildPlaceholder(colorScheme),
-                  ),
-                  // Tags
-                  if (metadata.isPopular || metadata.quality != null)
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Row(
-                        children: [
-                          if (metadata.isPopular)
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: SvgPicture.asset(
-                                'assets/icons/flame.svg',
-                                width: 12,
-                                height: 12,
-                                colorFilter: const ColorFilter.mode(
-                                  Colors.white,
-                                  BlendMode.srcIn,
-                                ),
-                              ),
-                            ),
-                          if (metadata.quality != null) ...[
-                            if (metadata.isPopular) const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                metadata.quality!,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Title
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                metadata.cleanName,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurface,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            children: [
+              // Full-size image
+              Positioned.fill(
+                child: Container(
+                  color: colorScheme.onSurface.withAlpha(10),
+                  child: movie.streamIcon != null
+                      ? CachedNetworkImage(
+                          imageUrl: movie.streamIcon!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                        )
+                      : _buildPlaceholder(colorScheme),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
+              // Gradient overlay
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withAlpha(100),
+                        Colors.black.withAlpha(200),
+                        Colors.black.withAlpha(230),
+                      ],
+                      stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Tags
+              if (metadata.isPopular || metadata.quality != null)
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Row(
+                    children: [
+                      if (metadata.isPopular)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: SvgPicture.asset(
+                            'assets/icons/flame.svg',
+                            width: 12,
+                            height: 12,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      if (metadata.quality != null) ...[
+                        if (metadata.isPopular) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              // Title at bottom
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Text(
+                  metadata.cleanName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
