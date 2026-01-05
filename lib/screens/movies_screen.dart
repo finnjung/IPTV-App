@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
 import '../widgets/sticky_glass_header.dart';
+import '../widgets/section_header.dart';
+import '../widgets/responsive_grid.dart';
 import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
 import 'player_screen.dart';
@@ -18,32 +21,18 @@ class MoviesScreen extends StatefulWidget {
 }
 
 class _MoviesScreenState extends State<MoviesScreen> {
-  List<XTremeCodeVodItem> _movies = [];
-  bool _isLoading = true;
+  bool _showAllMovies = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMovies();
+    _loadContent();
   }
 
-  Future<void> _loadMovies() async {
+  Future<void> _loadContent() async {
     final xtreamService = context.read<XtreamService>();
-
-    if (!xtreamService.isConnected) {
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final movies = await xtreamService.getMovies();
-
-    if (mounted) {
-      setState(() {
-        _movies = movies;
-        _isLoading = false;
-      });
+    if (xtreamService.isConnected) {
+      await xtreamService.loadMoviesScreenContent();
     }
   }
 
@@ -76,6 +65,8 @@ class _MoviesScreenState extends State<MoviesScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
+    final content = xtreamService.moviesScreenContent;
+    final isLoading = xtreamService.isLoadingMovies;
 
     return Scaffold(
       body: !xtreamService.isConnected
@@ -85,83 +76,153 @@ class _MoviesScreenState extends State<MoviesScreen> {
                 // Sticky Glass Header
                 StickyGlassHeader(
                   title: 'Filme',
-                  subtitle: _isLoading
-                      ? 'Lädt...'
-                      : '${_movies.length} Filme verfügbar',
+                  subtitle: isLoading
+                      ? 'Laden...'
+                      : '${content?.allMoviesSorted.length ?? 0} Filme verfugbar',
                   iconPath: 'assets/icons/film-strip.svg',
                 ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-                  // Loading or Content
-                  if (_isLoading)
-                    const SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: CircularProgressIndicator(),
-                        ),
+                // Loading
+                if (isLoading || content == null)
+                  const SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(),
                       ),
-                    )
-                  else if (_movies.isEmpty)
+                    ),
+                  )
+                else if (content.isEmpty)
+                  SliverToBoxAdapter(child: _buildEmptyState(colorScheme))
+                else ...[
+                  // Pseudo-Category Sections
+                  for (final category in content.categories) ...[
                     SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(40),
-                          child: Column(
-                            children: [
-                              SvgPicture.asset(
-                                'assets/icons/film-strip.svg',
-                                width: 48,
-                                height: 48,
-                                colorFilter: ColorFilter.mode(
-                                  colorScheme.onSurface.withAlpha(100),
-                                  BlendMode.srcIn,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Keine Filme gefunden',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.7,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final movie = _movies[index];
-                            return ContentCard(
-                              title: movie.name ?? 'Unbekannt',
-                              subtitle: movie.year,
-                              imageUrl: movie.streamIcon,
-                              icon: 'assets/icons/film-strip.svg',
-                              onTap: () => _playMovie(movie),
-                            );
-                          },
-                          childCount: _movies.length,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                        child: SectionHeader(
+                          title: category.title,
+                          icon: category.icon,
                         ),
                       ),
                     ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 200,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: category.items.length,
+                          itemBuilder: (context, index) {
+                            final movie = category.items[index];
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                right: index < category.items.length - 1 ? 12 : 0,
+                              ),
+                              child: _MovieCard(
+                                movie: movie,
+                                onTap: () => _playMovie(movie),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  // All Movies Section Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+                      child: SectionHeader(
+                        title: 'Alle Filme (A-Z)',
+                        icon: 'assets/icons/list.svg',
+                        onSeeAll: _showAllMovies
+                            ? null
+                            : () => setState(() => _showAllMovies = true),
+                      ),
+                    ),
+                  ),
+
+                  // All Movies Grid
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: ResponsiveSliverGrid(
+                      itemCount: _showAllMovies
+                          ? content.allMoviesSorted.length
+                          : content.allMoviesSorted.length.clamp(0, 20),
+                      childAspectRatio: 0.7,
+                      itemBuilder: (context, index) {
+                        final movie = content.allMoviesSorted[index];
+                        return ContentCard(
+                          title: movie.name ?? 'Unbekannt',
+                          subtitle: movie.year,
+                          imageUrl: movie.streamIcon,
+                          icon: 'assets/icons/film-strip.svg',
+                          onTap: () => _playMovie(movie),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // Show more button
+                  if (!_showAllMovies && content.allMoviesSorted.length > 20)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: OutlinedButton(
+                          onPressed: () => setState(() => _showAllMovies = true),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(
+                              color: colorScheme.outline.withAlpha(50),
+                            ),
+                          ),
+                          child: Text(
+                            'Alle ${content.allMoviesSorted.length} Filme anzeigen',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
+
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildEmptyState(ColorScheme colorScheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          children: [
+            SvgPicture.asset(
+              'assets/icons/film-strip.svg',
+              width: 48,
+              height: 48,
+              colorFilter: ColorFilter.mode(
+                colorScheme.onSurface.withAlpha(100),
+                BlendMode.srcIn,
               ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Keine Filme gefunden',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: colorScheme.onSurface.withAlpha(150),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -209,6 +270,134 @@ class _MoviesScreenState extends State<MoviesScreen> {
               textAlign: TextAlign.center,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MovieCard extends StatelessWidget {
+  final XTremeCodeVodItem movie;
+  final VoidCallback onTap;
+
+  const _MovieCard({
+    required this.movie,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final metadata = ContentParser.parse(movie.name ?? '');
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 130,
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: colorScheme.outline.withAlpha(25),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Poster
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+              child: Stack(
+                children: [
+                  Container(
+                    height: 140,
+                    width: double.infinity,
+                    color: colorScheme.onSurface.withAlpha(10),
+                    child: movie.streamIcon != null
+                        ? CachedNetworkImage(
+                            imageUrl: movie.streamIcon!,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                          )
+                        : _buildPlaceholder(colorScheme),
+                  ),
+                  // Tags
+                  if (metadata.isPopular || metadata.quality != null)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Row(
+                        children: [
+                          if (metadata.isPopular)
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: SvgPicture.asset(
+                                'assets/icons/flame.svg',
+                                width: 12,
+                                height: 12,
+                                colorFilter: const ColorFilter.mode(
+                                  Colors.white,
+                                  BlendMode.srcIn,
+                                ),
+                              ),
+                            ),
+                          if (metadata.quality != null) ...[
+                            if (metadata.isPopular) const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.quality!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Title
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                metadata.cleanName,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: colorScheme.onSurface,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    return Center(
+      child: SvgPicture.asset(
+        'assets/icons/film-strip.svg',
+        width: 32,
+        height: 32,
+        colorFilter: ColorFilter.mode(
+          colorScheme.onSurface.withAlpha(30),
+          BlendMode.srcIn,
         ),
       ),
     );

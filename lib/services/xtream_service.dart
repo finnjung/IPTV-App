@@ -59,9 +59,23 @@ class XtreamService extends ChangeNotifier {
   StartScreenContent? _startScreenContent;
   bool _isLoadingStartScreen = false;
 
+  // Cached Screen Content for Movies/Series/Live TV
+  MoviesScreenContent? _moviesScreenContent;
+  SeriesScreenContent? _seriesScreenContent;
+  LiveTvScreenContent? _liveTvScreenContent;
+  bool _isLoadingMovies = false;
+  bool _isLoadingSeries = false;
+  bool _isLoadingLiveTv = false;
+
   bool get isConnected => _isConnected;
   bool get isStartScreenLoading => _isLoadingStartScreen;
   StartScreenContent? get startScreenContent => _startScreenContent;
+  MoviesScreenContent? get moviesScreenContent => _moviesScreenContent;
+  SeriesScreenContent? get seriesScreenContent => _seriesScreenContent;
+  LiveTvScreenContent? get liveTvScreenContent => _liveTvScreenContent;
+  bool get isLoadingMovies => _isLoadingMovies;
+  bool get isLoadingSeries => _isLoadingSeries;
+  bool get isLoadingLiveTv => _isLoadingLiveTv;
   bool get autoHideEmptySeries => _autoHideEmptySeries;
   bool get isLoading => _isLoading;
   String? get preferredLanguage => _preferredLanguage;
@@ -364,6 +378,9 @@ class XtreamService extends ChangeNotifier {
     _vodByCategory.clear();
     _seriesByCategory.clear();
     _startScreenContent = null;
+    _moviesScreenContent = null;
+    _seriesScreenContent = null;
+    _liveTvScreenContent = null;
 
     notifyListeners();
   }
@@ -601,6 +618,111 @@ class XtreamService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ==================== Movies Screen Content ====================
+
+  /// Lädt den Content für den Movies Screen (gecacht)
+  Future<MoviesScreenContent> loadMoviesScreenContent({bool forceRefresh = false}) async {
+    // Return cached content if available
+    if (_moviesScreenContent != null && !forceRefresh) {
+      return _moviesScreenContent!;
+    }
+
+    // Prevent multiple simultaneous loads
+    if (_isLoadingMovies) {
+      while (_isLoadingMovies) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      return _moviesScreenContent ?? MoviesScreenContent.empty();
+    }
+
+    _isLoadingMovies = true;
+    notifyListeners();
+
+    try {
+      final allMovies = await getMovies();
+      _moviesScreenContent = await compute(_buildMoviesScreenContent, allMovies);
+      debugPrint('Movies screen content loaded: ${_moviesScreenContent!.categories.length} categories, ${_moviesScreenContent!.allMoviesSorted.length} total');
+    } catch (e) {
+      debugPrint('Error loading movies screen content: $e');
+      _moviesScreenContent = MoviesScreenContent.empty();
+    }
+
+    _isLoadingMovies = false;
+    notifyListeners();
+
+    return _moviesScreenContent!;
+  }
+
+  // ==================== Series Screen Content ====================
+
+  /// Lädt den Content für den Series Screen (gecacht)
+  Future<SeriesScreenContent> loadSeriesScreenContent({bool forceRefresh = false}) async {
+    // Return cached content if available
+    if (_seriesScreenContent != null && !forceRefresh) {
+      return _seriesScreenContent!;
+    }
+
+    // Prevent multiple simultaneous loads
+    if (_isLoadingSeries) {
+      while (_isLoadingSeries) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      return _seriesScreenContent ?? SeriesScreenContent.empty();
+    }
+
+    _isLoadingSeries = true;
+    notifyListeners();
+
+    try {
+      final allSeries = await getSeries();
+      _seriesScreenContent = await compute(_buildSeriesScreenContent, allSeries);
+      debugPrint('Series screen content loaded: ${_seriesScreenContent!.categories.length} categories, ${_seriesScreenContent!.allSeriesSorted.length} total');
+    } catch (e) {
+      debugPrint('Error loading series screen content: $e');
+      _seriesScreenContent = SeriesScreenContent.empty();
+    }
+
+    _isLoadingSeries = false;
+    notifyListeners();
+
+    return _seriesScreenContent!;
+  }
+
+  // ==================== Live TV Screen Content ====================
+
+  /// Lädt den Content für den Live TV Screen (gecacht)
+  Future<LiveTvScreenContent> loadLiveTvScreenContent({bool forceRefresh = false}) async {
+    // Return cached content if available
+    if (_liveTvScreenContent != null && !forceRefresh) {
+      return _liveTvScreenContent!;
+    }
+
+    // Prevent multiple simultaneous loads
+    if (_isLoadingLiveTv) {
+      while (_isLoadingLiveTv) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      return _liveTvScreenContent ?? LiveTvScreenContent.empty();
+    }
+
+    _isLoadingLiveTv = true;
+    notifyListeners();
+
+    try {
+      final allStreams = await getLiveStreams();
+      _liveTvScreenContent = await compute(_buildLiveTvScreenContent, allStreams);
+      debugPrint('Live TV screen content loaded: ${_liveTvScreenContent!.categories.length} categories, ${_liveTvScreenContent!.allStreamsSorted.length} total');
+    } catch (e) {
+      debugPrint('Error loading live TV screen content: $e');
+      _liveTvScreenContent = LiveTvScreenContent.empty();
+    }
+
+    _isLoadingLiveTv = false;
+    notifyListeners();
+
+    return _liveTvScreenContent!;
+  }
+
   /// Sucht nach Filmen, Serien und Live TV
   /// Gibt gefilterte Listen zurück basierend auf dem Suchbegriff
   Future<SearchResults> search(String query) async {
@@ -726,5 +848,322 @@ List<XTremeCodeSeriesItem> _sortSeriesByLanguage(_SortParams<XTremeCodeSeriesIte
     params.items,
     params.language,
     (s) => s.name ?? '',
+  );
+}
+
+// ==================== Movies Screen Content ====================
+
+class PseudoCategory<T> {
+  final String title;
+  final String icon;
+  final List<T> items;
+
+  PseudoCategory({
+    required this.title,
+    required this.icon,
+    required this.items,
+  });
+}
+
+class MoviesScreenContent {
+  final List<PseudoCategory<XTremeCodeVodItem>> categories;
+  final List<XTremeCodeVodItem> allMoviesSorted;
+
+  MoviesScreenContent({
+    required this.categories,
+    required this.allMoviesSorted,
+  });
+
+  factory MoviesScreenContent.empty() => MoviesScreenContent(
+        categories: [],
+        allMoviesSorted: [],
+      );
+
+  bool get isEmpty => allMoviesSorted.isEmpty;
+}
+
+class SeriesScreenContent {
+  final List<PseudoCategory<XTremeCodeSeriesItem>> categories;
+  final List<XTremeCodeSeriesItem> allSeriesSorted;
+
+  SeriesScreenContent({
+    required this.categories,
+    required this.allSeriesSorted,
+  });
+
+  factory SeriesScreenContent.empty() => SeriesScreenContent(
+        categories: [],
+        allSeriesSorted: [],
+      );
+
+  bool get isEmpty => allSeriesSorted.isEmpty;
+}
+
+class LiveTvScreenContent {
+  final List<PseudoCategory<XTremeCodeLiveStreamItem>> categories;
+  final List<XTremeCodeLiveStreamItem> allStreamsSorted;
+
+  LiveTvScreenContent({
+    required this.categories,
+    required this.allStreamsSorted,
+  });
+
+  factory LiveTvScreenContent.empty() => LiveTvScreenContent(
+        categories: [],
+        allStreamsSorted: [],
+      );
+
+  bool get isEmpty => allStreamsSorted.isEmpty;
+}
+
+// Isolate functions for building screen content
+MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies) {
+  final categories = <PseudoCategory<XTremeCodeVodItem>>[];
+
+  // Parse metadata for all movies
+  final moviesWithMeta = allMovies.map((m) {
+    final meta = ContentParser.parse(m.name ?? '');
+    return (movie: m, meta: meta);
+  }).toList();
+
+  // 1. Beliebt
+  final popular = moviesWithMeta
+      .where((m) => m.meta.isPopular)
+      .map((m) => m.movie)
+      .take(20)
+      .toList();
+  if (popular.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Beliebt',
+      icon: 'assets/icons/flame.svg',
+      items: popular,
+    ));
+  }
+
+  // 2. 4K Filme
+  final movies4k = moviesWithMeta
+      .where((m) => m.meta.quality == '4K' || m.meta.quality == '8K')
+      .map((m) => m.movie)
+      .take(20)
+      .toList();
+  if (movies4k.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: '4K Filme',
+      icon: 'assets/icons/monitor-play.svg',
+      items: movies4k,
+    ));
+  }
+
+  // 3. Deutsche Filme
+  final germanMovies = moviesWithMeta
+      .where((m) => m.meta.language == 'DE' || m.meta.language == 'German')
+      .map((m) => m.movie)
+      .take(20)
+      .toList();
+  if (germanMovies.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Deutsche Filme',
+      icon: 'assets/icons/film-strip.svg',
+      items: germanMovies,
+    ));
+  }
+
+  // 4. Kinderfilme
+  final kidsMovies = allMovies
+      .where((m) => (m.name ?? '').toUpperCase().contains('KIDS') ||
+                    (m.name ?? '').toUpperCase().contains('KINDER') ||
+                    (m.name ?? '').toUpperCase().contains('ANIMATION') ||
+                    (m.name ?? '').toUpperCase().contains('DISNEY'))
+      .take(20)
+      .toList();
+  if (kidsMovies.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Kinderfilme',
+      icon: 'assets/icons/star.svg',
+      items: kidsMovies,
+    ));
+  }
+
+  // Sort all movies alphabetically
+  final sortedMovies = List<XTremeCodeVodItem>.from(allMovies);
+  sortedMovies.sort((a, b) {
+    final nameA = (a.name ?? '').toLowerCase();
+    final nameB = (b.name ?? '').toLowerCase();
+    return nameA.compareTo(nameB);
+  });
+
+  return MoviesScreenContent(
+    categories: categories,
+    allMoviesSorted: sortedMovies,
+  );
+}
+
+SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeries) {
+  final categories = <PseudoCategory<XTremeCodeSeriesItem>>[];
+
+  // Parse metadata for all series
+  final seriesWithMeta = allSeries.map((s) {
+    final meta = ContentParser.parse(s.name ?? '');
+    return (series: s, meta: meta);
+  }).toList();
+
+  // 1. Beliebt
+  final popular = seriesWithMeta
+      .where((s) => s.meta.isPopular)
+      .map((s) => s.series)
+      .take(20)
+      .toList();
+  if (popular.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Beliebt',
+      icon: 'assets/icons/flame.svg',
+      items: popular,
+    ));
+  }
+
+  // 2. 4K Serien
+  final series4k = seriesWithMeta
+      .where((s) => s.meta.quality == '4K' || s.meta.quality == '8K')
+      .map((s) => s.series)
+      .take(20)
+      .toList();
+  if (series4k.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: '4K Serien',
+      icon: 'assets/icons/monitor-play.svg',
+      items: series4k,
+    ));
+  }
+
+  // 3. Deutsche Serien
+  final germanSeries = seriesWithMeta
+      .where((s) => s.meta.language == 'DE' || s.meta.language == 'German')
+      .map((s) => s.series)
+      .take(20)
+      .toList();
+  if (germanSeries.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Deutsche Serien',
+      icon: 'assets/icons/monitor-play.svg',
+      items: germanSeries,
+    ));
+  }
+
+  // 4. Kinderserien
+  final kidsSeries = allSeries
+      .where((s) => (s.name ?? '').toUpperCase().contains('KIDS') ||
+                    (s.name ?? '').toUpperCase().contains('KINDER') ||
+                    (s.name ?? '').toUpperCase().contains('ANIMATION') ||
+                    (s.name ?? '').toUpperCase().contains('DISNEY') ||
+                    (s.name ?? '').toUpperCase().contains('CARTOON'))
+      .take(20)
+      .toList();
+  if (kidsSeries.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Kinderserien',
+      icon: 'assets/icons/star.svg',
+      items: kidsSeries,
+    ));
+  }
+
+  // Sort all series alphabetically
+  final sortedSeries = List<XTremeCodeSeriesItem>.from(allSeries);
+  sortedSeries.sort((a, b) {
+    final nameA = (a.name ?? '').toLowerCase();
+    final nameB = (b.name ?? '').toLowerCase();
+    return nameA.compareTo(nameB);
+  });
+
+  return SeriesScreenContent(
+    categories: categories,
+    allSeriesSorted: sortedSeries,
+  );
+}
+
+LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> allStreams) {
+  final categories = <PseudoCategory<XTremeCodeLiveStreamItem>>[];
+
+  // Parse metadata for all streams
+  final streamsWithMeta = allStreams.map((s) {
+    final meta = ContentParser.parse(s.name ?? '');
+    return (stream: s, meta: meta);
+  }).toList();
+
+  // 1. Beliebt
+  final popular = streamsWithMeta
+      .where((s) => s.meta.isPopular)
+      .map((s) => s.stream)
+      .take(20)
+      .toList();
+  if (popular.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Beliebt',
+      icon: 'assets/icons/flame.svg',
+      items: popular,
+    ));
+  }
+
+  // 2. Deutsche Sender
+  final germanStreams = streamsWithMeta
+      .where((s) => s.meta.country == 'DE' ||
+                    s.meta.language == 'DE' ||
+                    (s.stream.name ?? '').toUpperCase().contains('GERMAN'))
+      .map((s) => s.stream)
+      .take(20)
+      .toList();
+  if (germanStreams.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Deutsche Sender',
+      icon: 'assets/icons/television.svg',
+      items: germanStreams,
+    ));
+  }
+
+  // 3. Sport
+  final sportStreams = allStreams
+      .where((s) => (s.name ?? '').toUpperCase().contains('SPORT') ||
+                    (s.name ?? '').toUpperCase().contains('DAZN') ||
+                    (s.name ?? '').toUpperCase().contains('SKY SPORT') ||
+                    (s.name ?? '').toUpperCase().contains('EUROSPORT'))
+      .take(20)
+      .toList();
+  if (sportStreams.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Sport',
+      icon: 'assets/icons/star.svg',
+      items: sportStreams,
+    ));
+  }
+
+  // 4. Nachrichten
+  final newsStreams = allStreams
+      .where((s) => (s.name ?? '').toUpperCase().contains('NEWS') ||
+                    (s.name ?? '').toUpperCase().contains('NACHRICHTEN') ||
+                    (s.name ?? '').toUpperCase().contains('N-TV') ||
+                    (s.name ?? '').toUpperCase().contains('NTV') ||
+                    (s.name ?? '').toUpperCase().contains('WELT') ||
+                    (s.name ?? '').toUpperCase().contains('CNN') ||
+                    (s.name ?? '').toUpperCase().contains('BBC NEWS'))
+      .take(20)
+      .toList();
+  if (newsStreams.isNotEmpty) {
+    categories.add(PseudoCategory(
+      title: 'Nachrichten',
+      icon: 'assets/icons/broadcast.svg',
+      items: newsStreams,
+    ));
+  }
+
+  // Sort all streams alphabetically
+  final sortedStreams = List<XTremeCodeLiveStreamItem>.from(allStreams);
+  sortedStreams.sort((a, b) {
+    final nameA = (a.name ?? '').toLowerCase();
+    final nameB = (b.name ?? '').toLowerCase();
+    return nameA.compareTo(nameB);
+  });
+
+  return LiveTvScreenContent(
+    categories: categories,
+    allStreamsSorted: sortedStreams,
   );
 }
