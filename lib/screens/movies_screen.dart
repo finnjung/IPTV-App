@@ -5,10 +5,10 @@ import 'package:provider/provider.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../widgets/content_card.dart';
+import '../widgets/sticky_glass_header.dart';
 import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
 import 'player_screen.dart';
-import 'search_screen.dart';
 
 class MoviesScreen extends StatefulWidget {
   const MoviesScreen({super.key});
@@ -78,83 +78,20 @@ class _MoviesScreenState extends State<MoviesScreen> {
     final xtreamService = context.watch<XtreamService>();
 
     return Scaffold(
-      body: SafeArea(
-        child: !xtreamService.isConnected
-            ? _buildNotConnected(context)
-            : CustomScrollView(
-                slivers: [
-                  // Header
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              SvgPicture.asset(
-                                'assets/icons/film-strip.svg',
-                                width: 28,
-                                height: 28,
-                                colorFilter: ColorFilter.mode(
-                                  colorScheme.onSurface,
-                                  BlendMode.srcIn,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Filme',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                              const Spacer(),
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const SearchScreen(),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: SvgPicture.asset(
-                                    'assets/icons/magnifying-glass.svg',
-                                    width: 22,
-                                    height: 22,
-                                    colorFilter: ColorFilter.mode(
-                                      colorScheme.onSurface.withAlpha(180),
-                                      BlendMode.srcIn,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _isLoading
-                                ? 'Lädt...'
-                                : '${_movies.length} Filme verfügbar',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: colorScheme.onSurface.withAlpha(150),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+      body: !xtreamService.isConnected
+          ? SafeArea(child: _buildNotConnected(context))
+          : CustomScrollView(
+              slivers: [
+                // Sticky Glass Header
+                StickyGlassHeader(
+                  title: 'Filme',
+                  subtitle: _isLoading
+                      ? 'Lädt...'
+                      : '${_movies.length} Filme verfügbar',
+                  iconPath: 'assets/icons/film-strip.svg',
+                ),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
                   // Loading or Content
                   if (_isLoading)
@@ -225,7 +162,6 @@ class _MoviesScreenState extends State<MoviesScreen> {
                   const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
               ),
-      ),
     );
   }
 

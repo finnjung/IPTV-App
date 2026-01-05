@@ -7,6 +7,7 @@ import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
+import '../widgets/sticky_glass_header.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 
@@ -49,54 +50,16 @@ class _StartScreenState extends State<StartScreen> {
     final preferredLanguage = xtreamService.preferredLanguage;
 
     return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refreshContent,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              // Header
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Willkommen',
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'zurück',
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w400,
-                              color: colorScheme.onSurface.withAlpha(150),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Was möchtest du schauen?',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: colorScheme.onSurface.withAlpha(150),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+      body: RefreshIndicator(
+        onRefresh: _refreshContent,
+        edgeOffset: 120,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // Sticky Glass Header
+            const StickyStartHeader(),
 
-              // Continue Watching Section (always show if available)
+            // Continue Watching Section (always show if available)
               if (continueWatching.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
@@ -302,7 +265,6 @@ class _StartScreenState extends State<StartScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
