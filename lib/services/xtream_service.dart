@@ -820,35 +820,63 @@ class _SortParams<T> {
   _SortParams(this.items, this.language);
 }
 
-// Isolate functions for heavy parsing (must be top-level)
+// ============== OPTIMIERTE Isolate-Funktionen für Start Screen ==============
+// Verwenden Quick-Filter ohne volles Parsing für bessere Performance
+
 List<XTremeCodeVodItem> _filterPopularMovies(List<XTremeCodeVodItem> movies) {
+  // Optimiert: Quick-Filter statt volles Parsing
   return movies.where((m) {
-    final metadata = ContentParser.parse(m.name ?? '');
-    return metadata.isPopular;
+    return ContentParser.isPopularQuick(m.name ?? '');
   }).toList();
 }
 
 List<XTremeCodeSeriesItem> _filterPopularSeries(List<XTremeCodeSeriesItem> series) {
+  // Optimiert: Quick-Filter statt volles Parsing
   return series.where((s) {
-    final metadata = ContentParser.parse(s.name ?? '');
-    return metadata.isPopular;
+    return ContentParser.isPopularQuick(s.name ?? '');
   }).toList();
 }
 
 List<XTremeCodeVodItem> _sortMoviesByLanguage(_SortParams<XTremeCodeVodItem> params) {
-  return ContentParser.sortByPreference<XTremeCodeVodItem>(
-    params.items,
-    params.language,
-    (m) => m.name ?? '',
-  );
+  // Optimiert: Quick-Filter für Sprache, dann nur Top-Ergebnisse sortieren
+  final preferredLang = params.language.toUpperCase();
+
+  // Erst alle mit bevorzugter Sprache finden (Quick-Check)
+  final preferred = <XTremeCodeVodItem>[];
+  final others = <XTremeCodeVodItem>[];
+
+  for (final movie in params.items) {
+    final lang = ContentParser.getLanguageQuick(movie.name ?? '');
+    if (lang == preferredLang || lang == 'DE' && preferredLang == 'GERMAN') {
+      preferred.add(movie);
+    } else {
+      others.add(movie);
+    }
+  }
+
+  // Bevorzugte zuerst, dann Rest
+  return [...preferred, ...others];
 }
 
 List<XTremeCodeSeriesItem> _sortSeriesByLanguage(_SortParams<XTremeCodeSeriesItem> params) {
-  return ContentParser.sortByPreference<XTremeCodeSeriesItem>(
-    params.items,
-    params.language,
-    (s) => s.name ?? '',
-  );
+  // Optimiert: Quick-Filter für Sprache, dann nur Top-Ergebnisse sortieren
+  final preferredLang = params.language.toUpperCase();
+
+  // Erst alle mit bevorzugter Sprache finden (Quick-Check)
+  final preferred = <XTremeCodeSeriesItem>[];
+  final others = <XTremeCodeSeriesItem>[];
+
+  for (final series in params.items) {
+    final lang = ContentParser.getLanguageQuick(series.name ?? '');
+    if (lang == preferredLang || lang == 'DE' && preferredLang == 'GERMAN') {
+      preferred.add(series);
+    } else {
+      others.add(series);
+    }
+  }
+
+  // Bevorzugte zuerst, dann Rest
+  return [...preferred, ...others];
 }
 
 // ==================== Movies Screen Content ====================
@@ -916,22 +944,45 @@ class LiveTvScreenContent {
   bool get isEmpty => allStreamsSorted.isEmpty;
 }
 
-// Isolate functions for building screen content
+// ============== OPTIMIERTE Isolate-Funktionen ==============
+// Verwenden Early-Exit, Quick-Filters und optimierte String-Operationen
+
+/// Hilfsfunktion: Findet bis zu N Items die eine Bedingung erfüllen (Early-Exit)
+List<T> _findUpTo<T>(List<T> items, int limit, bool Function(T) test) {
+  final result = <T>[];
+  for (final item in items) {
+    if (test(item)) {
+      result.add(item);
+      if (result.length >= limit) break;
+    }
+  }
+  return result;
+}
+
+/// Hilfsfunktion: Schnelle Keyword-Suche in Name (case-insensitive)
+bool _nameContainsAny(String upperName, List<String> keywords) {
+  for (final keyword in keywords) {
+    if (upperName.contains(keyword)) return true;
+  }
+  return false;
+}
+
+/// Hilfsfunktion: Optimierte alphabetische Sortierung mit pre-computed keys
+List<T> _sortAlphabetically<T>(List<T> items, String Function(T) getName) {
+  // Pre-compute lowercase names (O(n) statt O(n log n) toLowerCase calls)
+  final withKeys = items.map((item) => (item: item, key: getName(item).toLowerCase())).toList();
+  withKeys.sort((a, b) => a.key.compareTo(b.key));
+  return withKeys.map((e) => e.item).toList();
+}
+
 MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies) {
   final categories = <PseudoCategory<XTremeCodeVodItem>>[];
+  const limit = 20;
 
-  // Parse metadata for all movies
-  final moviesWithMeta = allMovies.map((m) {
-    final meta = ContentParser.parse(m.name ?? '');
-    return (movie: m, meta: meta);
-  }).toList();
-
-  // 1. Beliebt
-  final popular = moviesWithMeta
-      .where((m) => m.meta.isPopular)
-      .map((m) => m.movie)
-      .take(20)
-      .toList();
+  // 1. Beliebt - Quick-Filter mit Early-Exit
+  final popular = _findUpTo(allMovies, limit, (m) {
+    return ContentParser.isPopularQuick(m.name ?? '');
+  });
   if (popular.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Beliebt',
@@ -940,12 +991,11 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
     ));
   }
 
-  // 2. 4K Filme
-  final movies4k = moviesWithMeta
-      .where((m) => m.meta.quality == '4K' || m.meta.quality == '8K')
-      .map((m) => m.movie)
-      .take(20)
-      .toList();
+  // 2. 4K Filme - Quick-Filter mit Early-Exit
+  final movies4k = _findUpTo(allMovies, limit, (m) {
+    final quality = ContentParser.getQualityQuick(m.name ?? '');
+    return quality == '4K' || quality == '8K';
+  });
   if (movies4k.isNotEmpty) {
     categories.add(PseudoCategory(
       title: '4K Filme',
@@ -954,12 +1004,11 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
     ));
   }
 
-  // 3. Deutsche Filme
-  final germanMovies = moviesWithMeta
-      .where((m) => m.meta.language == 'DE' || m.meta.language == 'German')
-      .map((m) => m.movie)
-      .take(20)
-      .toList();
+  // 3. Deutsche Filme - Quick-Filter mit Early-Exit
+  final germanMovies = _findUpTo(allMovies, limit, (m) {
+    final lang = ContentParser.getLanguageQuick(m.name ?? '');
+    return lang == 'DE';
+  });
   if (germanMovies.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Deutsche Filme',
@@ -968,14 +1017,12 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
     ));
   }
 
-  // 4. Kinderfilme
-  final kidsMovies = allMovies
-      .where((m) => (m.name ?? '').toUpperCase().contains('KIDS') ||
-                    (m.name ?? '').toUpperCase().contains('KINDER') ||
-                    (m.name ?? '').toUpperCase().contains('ANIMATION') ||
-                    (m.name ?? '').toUpperCase().contains('DISNEY'))
-      .take(20)
-      .toList();
+  // 4. Kinderfilme - Optimiert: einmal toUpperCase, keine Regex
+  const kidsKeywords = ['KIDS', 'KINDER', 'ANIMATION', 'DISNEY'];
+  final kidsMovies = _findUpTo(allMovies, limit, (m) {
+    final upper = (m.name ?? '').toUpperCase();
+    return _nameContainsAny(upper, kidsKeywords);
+  });
   if (kidsMovies.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Kinderfilme',
@@ -984,13 +1031,8 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
     ));
   }
 
-  // Sort all movies alphabetically
-  final sortedMovies = List<XTremeCodeVodItem>.from(allMovies);
-  sortedMovies.sort((a, b) {
-    final nameA = (a.name ?? '').toLowerCase();
-    final nameB = (b.name ?? '').toLowerCase();
-    return nameA.compareTo(nameB);
-  });
+  // Optimierte alphabetische Sortierung
+  final sortedMovies = _sortAlphabetically(allMovies, (m) => m.name ?? '');
 
   return MoviesScreenContent(
     categories: categories,
@@ -1000,19 +1042,12 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
 
 SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeries) {
   final categories = <PseudoCategory<XTremeCodeSeriesItem>>[];
+  const limit = 20;
 
-  // Parse metadata for all series
-  final seriesWithMeta = allSeries.map((s) {
-    final meta = ContentParser.parse(s.name ?? '');
-    return (series: s, meta: meta);
-  }).toList();
-
-  // 1. Beliebt
-  final popular = seriesWithMeta
-      .where((s) => s.meta.isPopular)
-      .map((s) => s.series)
-      .take(20)
-      .toList();
+  // 1. Beliebt - Quick-Filter mit Early-Exit
+  final popular = _findUpTo(allSeries, limit, (s) {
+    return ContentParser.isPopularQuick(s.name ?? '');
+  });
   if (popular.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Beliebt',
@@ -1021,12 +1056,11 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
     ));
   }
 
-  // 2. 4K Serien
-  final series4k = seriesWithMeta
-      .where((s) => s.meta.quality == '4K' || s.meta.quality == '8K')
-      .map((s) => s.series)
-      .take(20)
-      .toList();
+  // 2. 4K Serien - Quick-Filter mit Early-Exit
+  final series4k = _findUpTo(allSeries, limit, (s) {
+    final quality = ContentParser.getQualityQuick(s.name ?? '');
+    return quality == '4K' || quality == '8K';
+  });
   if (series4k.isNotEmpty) {
     categories.add(PseudoCategory(
       title: '4K Serien',
@@ -1035,12 +1069,11 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
     ));
   }
 
-  // 3. Deutsche Serien
-  final germanSeries = seriesWithMeta
-      .where((s) => s.meta.language == 'DE' || s.meta.language == 'German')
-      .map((s) => s.series)
-      .take(20)
-      .toList();
+  // 3. Deutsche Serien - Quick-Filter mit Early-Exit
+  final germanSeries = _findUpTo(allSeries, limit, (s) {
+    final lang = ContentParser.getLanguageQuick(s.name ?? '');
+    return lang == 'DE';
+  });
   if (germanSeries.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Deutsche Serien',
@@ -1049,15 +1082,12 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
     ));
   }
 
-  // 4. Kinderserien
-  final kidsSeries = allSeries
-      .where((s) => (s.name ?? '').toUpperCase().contains('KIDS') ||
-                    (s.name ?? '').toUpperCase().contains('KINDER') ||
-                    (s.name ?? '').toUpperCase().contains('ANIMATION') ||
-                    (s.name ?? '').toUpperCase().contains('DISNEY') ||
-                    (s.name ?? '').toUpperCase().contains('CARTOON'))
-      .take(20)
-      .toList();
+  // 4. Kinderserien - Optimiert: einmal toUpperCase, keine Regex
+  const kidsKeywords = ['KIDS', 'KINDER', 'ANIMATION', 'DISNEY', 'CARTOON'];
+  final kidsSeries = _findUpTo(allSeries, limit, (s) {
+    final upper = (s.name ?? '').toUpperCase();
+    return _nameContainsAny(upper, kidsKeywords);
+  });
   if (kidsSeries.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Kinderserien',
@@ -1066,13 +1096,8 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
     ));
   }
 
-  // Sort all series alphabetically
-  final sortedSeries = List<XTremeCodeSeriesItem>.from(allSeries);
-  sortedSeries.sort((a, b) {
-    final nameA = (a.name ?? '').toLowerCase();
-    final nameB = (b.name ?? '').toLowerCase();
-    return nameA.compareTo(nameB);
-  });
+  // Optimierte alphabetische Sortierung
+  final sortedSeries = _sortAlphabetically(allSeries, (s) => s.name ?? '');
 
   return SeriesScreenContent(
     categories: categories,
@@ -1082,19 +1107,12 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
 
 LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> allStreams) {
   final categories = <PseudoCategory<XTremeCodeLiveStreamItem>>[];
+  const limit = 20;
 
-  // Parse metadata for all streams
-  final streamsWithMeta = allStreams.map((s) {
-    final meta = ContentParser.parse(s.name ?? '');
-    return (stream: s, meta: meta);
-  }).toList();
-
-  // 1. Beliebt
-  final popular = streamsWithMeta
-      .where((s) => s.meta.isPopular)
-      .map((s) => s.stream)
-      .take(20)
-      .toList();
+  // 1. Beliebt - Quick-Filter mit Early-Exit
+  final popular = _findUpTo(allStreams, limit, (s) {
+    return ContentParser.isPopularQuick(s.name ?? '');
+  });
   if (popular.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Beliebt',
@@ -1103,14 +1121,18 @@ LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> all
     ));
   }
 
-  // 2. Deutsche Sender
-  final germanStreams = streamsWithMeta
-      .where((s) => s.meta.country == 'DE' ||
-                    s.meta.language == 'DE' ||
-                    (s.stream.name ?? '').toUpperCase().contains('GERMAN'))
-      .map((s) => s.stream)
-      .take(20)
-      .toList();
+  // 2. Deutsche Sender - Kombinierter Quick-Check
+  final germanStreams = _findUpTo(allStreams, limit, (s) {
+    final name = s.name ?? '';
+    // Quick country check
+    final country = ContentParser.getCountryQuick(name);
+    if (country == 'DE') return true;
+    // Quick language check
+    final lang = ContentParser.getLanguageQuick(name);
+    if (lang == 'DE') return true;
+    // Keyword check
+    return name.toUpperCase().contains('GERMAN');
+  });
   if (germanStreams.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Deutsche Sender',
@@ -1119,14 +1141,12 @@ LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> all
     ));
   }
 
-  // 3. Sport
-  final sportStreams = allStreams
-      .where((s) => (s.name ?? '').toUpperCase().contains('SPORT') ||
-                    (s.name ?? '').toUpperCase().contains('DAZN') ||
-                    (s.name ?? '').toUpperCase().contains('SKY SPORT') ||
-                    (s.name ?? '').toUpperCase().contains('EUROSPORT'))
-      .take(20)
-      .toList();
+  // 3. Sport - Optimiert: einmal toUpperCase, keine Regex
+  const sportKeywords = ['SPORT', 'DAZN', 'SKY SPORT', 'EUROSPORT'];
+  final sportStreams = _findUpTo(allStreams, limit, (s) {
+    final upper = (s.name ?? '').toUpperCase();
+    return _nameContainsAny(upper, sportKeywords);
+  });
   if (sportStreams.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Sport',
@@ -1135,17 +1155,12 @@ LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> all
     ));
   }
 
-  // 4. Nachrichten
-  final newsStreams = allStreams
-      .where((s) => (s.name ?? '').toUpperCase().contains('NEWS') ||
-                    (s.name ?? '').toUpperCase().contains('NACHRICHTEN') ||
-                    (s.name ?? '').toUpperCase().contains('N-TV') ||
-                    (s.name ?? '').toUpperCase().contains('NTV') ||
-                    (s.name ?? '').toUpperCase().contains('WELT') ||
-                    (s.name ?? '').toUpperCase().contains('CNN') ||
-                    (s.name ?? '').toUpperCase().contains('BBC NEWS'))
-      .take(20)
-      .toList();
+  // 4. Nachrichten - Optimiert: einmal toUpperCase, keine Regex
+  const newsKeywords = ['NEWS', 'NACHRICHTEN', 'N-TV', 'NTV', 'WELT', 'CNN', 'BBC NEWS'];
+  final newsStreams = _findUpTo(allStreams, limit, (s) {
+    final upper = (s.name ?? '').toUpperCase();
+    return _nameContainsAny(upper, newsKeywords);
+  });
   if (newsStreams.isNotEmpty) {
     categories.add(PseudoCategory(
       title: 'Nachrichten',
@@ -1154,13 +1169,8 @@ LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> all
     ));
   }
 
-  // Sort all streams alphabetically
-  final sortedStreams = List<XTremeCodeLiveStreamItem>.from(allStreams);
-  sortedStreams.sort((a, b) {
-    final nameA = (a.name ?? '').toLowerCase();
-    final nameB = (b.name ?? '').toLowerCase();
-    return nameA.compareTo(nameB);
-  });
+  // Optimierte alphabetische Sortierung
+  final sortedStreams = _sortAlphabetically(allStreams, (s) => s.name ?? '');
 
   return LiveTvScreenContent(
     categories: categories,

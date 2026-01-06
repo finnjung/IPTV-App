@@ -1,4 +1,5 @@
 /// Parser für Content-Namen um Metadaten zu extrahieren
+/// OPTIMIERT: Mit Memoization-Cache und vorkompilierten RegExp-Patterns
 class ContentParser {
   /// Bekannte Sprach-Codes
   static const Map<String, String> languageCodes = {
@@ -49,36 +50,29 @@ class ContentParser {
 
   /// Unicode/Sonderzeichen-Varianten von Qualitäts-Tags (werden zu 4K/HD normalisiert)
   static const Map<String, String> unicodeQualityTags = {
-    // UHD Varianten → 4K
     'ᵁᴴᴰ': '4K',
     '🅄🅗🅓': '4K',
     'Ⓤⓗⓓ': '4K',
     'ⓊⒽⒹ': '4K',
-    // 4K Varianten
     '⁴ᴷ': '4K',
     '⁴ᵏ': '4K',
     '⁴K': '4K',
     '⓸Ⓚ': '4K',
     '➍K': '4K',
     '₄K': '4K',
-    // 3840P Varianten → 4K
     '³⁸⁴⁰ᴾ': '4K',
     '³⁸⁴⁰ᵖ': '4K',
     '³⁸⁴⁰P': '4K',
-    // HD Varianten
     'ᴴᴰ': 'HD',
     'ᶠᴴᴰ': 'FHD',
   };
 
-  /// Unicode-Tags die komplett entfernt werden sollen (kein Badge, nur Bereinigung)
+  /// Unicode-Tags die komplett entfernt werden sollen
   static const List<String> unicodeRemoveTags = [
-    // Codec-Infos
     'ʰᵉᵛᶜ', 'ᴴᴱⱽᶜ', 'HEVC',
     'ʰ²⁶⁴', 'ᴴ²⁶⁴', 'H264', 'H.264',
     'ʰ²⁶⁵', 'ᴴ²⁶⁵', 'H265', 'H.265',
-    // RAW Tag
     'ᴿᴬᵂ', 'RAW',
-    // Andere technische Tags
     'ᴬᶜ³', 'AC3',
     'ᴬᴬᶜ', 'AAC',
     'ᴰᵀˢ', 'DTS',
@@ -96,17 +90,14 @@ class ContentParser {
     'IL', 'IR', 'SA', 'AE', 'EG', 'MA', 'ZA',
   };
 
-  /// Bekannte "Hot/Popular" Tags (für Badge-Erkennung)
+  /// Bekannte "Hot/Popular" Tags
   static const List<String> popularTags = [
     'HOT', 'TOP', 'NEW', 'VIP', 'PREMIUM', 'BEST', 'POPULAR', 'TREND',
   ];
 
   /// Alle Präfix-Tags die am Anfang entfernt werden sollen
   static const List<String> prefixTags = [
-    // Popular/Special (nur wenn mit Trennzeichen, nicht "Top Gun")
     'HOT', 'TOP', 'NEW', 'VIP', 'PREMIUM', 'BEST', 'POPULAR', 'TREND', 'GOLD',
-
-    // Streaming-Dienste & Provider
     'NF', 'NETFLIX', 'NFLX',
     'AMZN', 'AP', 'AMAZON', 'PRIME', 'AS',
     'DSNP', 'DP', 'DISNEY', 'DNY',
@@ -121,19 +112,13 @@ class ContentParser {
     'SLING', 'JOYN', 'MEO', 'DSTV', 'SKYGO', 'GOBX', 'OSN',
     'PLAY', 'PLAY+', 'PLAYER', 'GO', 'SAT', 'DVB-T',
     'M+', 'V+', 'ZINA',
-
-    // Sport
     '24/7', 'SPORTS', 'SPO', 'NBA', 'F1', 'SNOOKER', 'SPFL',
-
-    // Kategorien
     'DO', 'DOC', 'DOCU', 'DOCUMENTARY',
     'MV', 'MOVIE', 'FILM', 'MOV',
     'TV', 'SERIES', 'SHOW', 'SER',
     'AN', 'ANIME', 'ANI',
     'KI', 'KIDS', 'KID',
     'OD', 'VO', 'VD', 'CITY',
-
-    // Ländercodes (ISO + erweitert)
     'US', 'UK', 'DE', 'FR', 'ES', 'IT', 'NL', 'BE', 'AT', 'CH',
     'CA', 'CA EN', 'CA FR', 'AU', 'NZ', 'IE', 'IRL',
     'SE', 'NO', 'DK', 'FI', 'IS',
@@ -147,28 +132,175 @@ class ContentParser {
     'AF', 'AFG', 'AFR', 'EG', 'MA', 'TN', 'DZ', 'LY',
     'NG', 'NIG', 'GHA', 'KE', 'ZA', 'ETH', 'UGA', 'SEN', 'SOM',
     'LA', 'AZ', 'GE', 'AM', 'ARM', 'KZ', 'UZ',
-
-    // VIP/Premium Varianten
     'AL-VIP', 'PL VIP', 'GR VIP', 'BE-VIP', 'TR VIP', 'BE-FR', 'DE GO', 'AR 4K',
     'EXYU', 'STC', 'CRB', 'MXC', 'YP', 'NM', 'CG', 'MG', 'TK', 'RK',
     'SU', 'TY', 'SS', 'TS', 'RX', 'RC', 'RD', 'TF', 'FL',
     'BAN', 'SRI', 'KU',
-
-    // Sprachen (als Text)
     'HINDI', 'TAMIL', 'PUNJABI', 'MALAYALAM', 'TELUGU', 'GUJARATI', 'KANNADA', 'MARATHI', 'BENGALI',
     'ENGLISH', 'GERMAN', 'FRENCH', 'SPANISH', 'ITALIAN', 'ARABIC', 'TURKISH', 'RUSSIAN', 'POLISH',
     'GER', 'ENG', 'MULTI',
-
-    // Sonstige
     'F', 'M', 'SR',
   ];
 
-  // Regex-Pattern für Trennzeichen zwischen Tags (inkl. Unicode-Dashes und Doppelpunkt)
-  // Muss mindestens ein echtes Trennzeichen enthalten (-, –, —, |, :), nicht nur Leerzeichen
-  static final _separatorPattern = r'\s*[\-\–\—\|:]+\s*';
+  // ============== OPTIMIERUNG: Vorkompilierte Patterns ==============
 
-  /// Extrahiert Metadaten aus einem Content-Namen
+  /// Cache für Parse-Ergebnisse (Memoization)
+  static final Map<String, ContentMetadata> _parseCache = {};
+  static const int _maxCacheSize = 20000;
+
+  /// Vorkompilierte Regex-Patterns (einmal erstellen, oft verwenden)
+  static final RegExp _countryPrefixPattern = RegExp(r'^([A-Z]{2})\s*:', caseSensitive: false);
+  static final RegExp _yearPattern = RegExp(r'\b(19\d{2}|20\d{2})\b');
+  static final RegExp _unicodeCleanPattern = RegExp(r'[\u00B2\u00B3\u00B9\u1D00-\u1D7F\u1D80-\u1DBF\u2070-\u209F\u02B0-\u02FF]+');
+  static final RegExp _bracketsPattern = RegExp(r'\s*[\[\(][^\]\)]*[\]\)]\s*');
+  static final RegExp _pipesPattern = RegExp(r'\s*\|[^|]+\|\s*');
+  static final RegExp _multiSeparatorPattern = RegExp(r'[\s\-\–\—\|]{2,}');
+  static final RegExp _leadingSeparatorPattern = RegExp(r'^[\s\-\–\—\|]+');
+  static final RegExp _trailingSeparatorPattern = RegExp(r'[\s\-\–\—\|:]+$');
+  static final RegExp _multiSpacePattern = RegExp(r'\s{2,}');
+
+  /// Vorkompilierte Sprach-Patterns
+  static final Map<String, RegExp> _languagePatterns = {
+    for (final key in languageCodes.keys)
+      key: RegExp(
+        r'(?:^|\s|\||\[|\()' + key + r'(?:\s|\||:|\-|\–|\—|\]|\)|$)',
+        caseSensitive: false,
+      )
+  };
+
+  /// Vorkompilierte Qualitäts-Patterns
+  static final Map<String, RegExp> _qualityPatterns = {
+    for (final q in qualityTags)
+      q: RegExp(r'(?:^|\b)' + q + r'(?:\b|:)', caseSensitive: false)
+  };
+
+  /// Vorkompilierte Popular-Patterns (nur Präfix mit Trennzeichen)
+  static final Map<String, RegExp> _popularPatterns = {
+    for (final tag in popularTags)
+      tag: RegExp('^$tag' r'\s*[\-\–\—\|]', caseSensitive: false)
+  };
+
+  /// Vorkompilierte Präfix-Patterns (sortiert nach Länge, längste zuerst)
+  static final List<MapEntry<String, RegExp>> _prefixPatterns = () {
+    final sorted = List<String>.from(prefixTags)..sort((a, b) => b.length.compareTo(a.length));
+    return sorted.map((tag) {
+      final escaped = RegExp.escape(tag);
+      return MapEntry(tag, RegExp('^$escaped' r'\s*[\-\–\—\|:]+\s*', caseSensitive: false));
+    }).toList();
+  }();
+
+  /// Vorkompilierte Qualitäts-Entfernungs-Patterns
+  static final Map<String, List<RegExp>> _qualityRemovePatterns = {
+    for (final q in qualityTags)
+      q: [
+        RegExp('^$q' r'\s*:\s*', caseSensitive: false),
+        RegExp(r'(?:^|\s)' + q + r'(?:\s*[\-\–\—\|:]\s*|\s+|$)', caseSensitive: false),
+        RegExp(r'\s+' + q + r'$', caseSensitive: false),
+      ]
+  };
+
+  /// Vorkompilierte Popular-Entfernungs-Patterns
+  static final Map<String, List<RegExp>> _popularRemovePatterns = {
+    for (final tag in popularTags)
+      tag: [
+        RegExp('^$tag' r'\s*[\-\–\—\|:]+\s*', caseSensitive: false),
+        RegExp(r'\s*[\-\–\—\|:]+\s*' + tag + r'$', caseSensitive: false),
+      ]
+  };
+
+  /// Cache leeren (bei Speicherknappheit oder App-Neustart)
+  static void clearCache() {
+    _parseCache.clear();
+  }
+
+  /// Schneller Check ob ein Name "popular" ist (ohne volles Parsing)
+  static bool isPopularQuick(String name) {
+    final upper = name.toUpperCase();
+    for (final tag in popularTags) {
+      if (upper.startsWith(tag)) {
+        // Prüfe ob echtes Präfix mit Trennzeichen
+        final afterTag = upper.substring(tag.length).trimLeft();
+        if (afterTag.isNotEmpty && '-–—|:'.contains(afterTag[0])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Schneller Check für Qualität (ohne volles Parsing)
+  static String? getQualityQuick(String name) {
+    // Unicode zuerst
+    for (final entry in unicodeQualityTags.entries) {
+      if (name.contains(entry.key)) return entry.value;
+    }
+    // Dann normale Tags (Case-insensitive über toUpperCase)
+    final upper = name.toUpperCase();
+    if (upper.contains('8K') || upper.contains('4320P')) return '8K';
+    if (upper.contains('4K') || upper.contains('UHD') || upper.contains('2160P') || upper.contains('3840P')) return '4K';
+    if (upper.contains('FHD') || upper.contains('1080P')) return 'FHD';
+    if (upper.contains('HD') || upper.contains('720P')) return 'HD';
+    return null;
+  }
+
+  /// Schneller Check für Sprache (ohne volles Parsing)
+  static String? getLanguageQuick(String name) {
+    final upper = name.toUpperCase();
+    // Häufigste Sprachen zuerst prüfen
+    if (upper.contains('GERMAN') || _containsTag(upper, 'DE') || _containsTag(upper, 'GER')) return 'DE';
+    if (upper.contains('ENGLISH') || _containsTag(upper, 'EN') || _containsTag(upper, 'ENG')) return 'EN';
+    if (_containsTag(upper, 'FR') || upper.contains('FRENCH')) return 'FR';
+    if (_containsTag(upper, 'ES') || upper.contains('SPANISH')) return 'ES';
+    if (_containsTag(upper, 'IT') || upper.contains('ITALIAN')) return 'IT';
+    if (_containsTag(upper, 'TR') || upper.contains('TURKISH')) return 'TR';
+    return null;
+  }
+
+  /// Schneller Check für Land (ohne volles Parsing)
+  static String? getCountryQuick(String name) {
+    // Nur Präfix mit Doppelpunkt
+    final match = _countryPrefixPattern.firstMatch(name);
+    if (match != null) {
+      final code = match.group(1)!.toUpperCase();
+      if (countryCodes.contains(code)) return code;
+    }
+    return null;
+  }
+
+  /// Hilfsfunktion: Prüft ob Tag als separates Wort vorkommt
+  static bool _containsTag(String upper, String tag) {
+    final index = upper.indexOf(tag);
+    if (index == -1) return false;
+    // Prüfe ob echtes Tag (nicht Teil eines Wortes)
+    final before = index > 0 ? upper[index - 1] : ' ';
+    final after = index + tag.length < upper.length ? upper[index + tag.length] : ' ';
+    return !RegExp(r'[A-Z0-9]').hasMatch(before) && !RegExp(r'[A-Z0-9]').hasMatch(after);
+  }
+
+  /// Extrahiert Metadaten aus einem Content-Namen (mit Caching)
   static ContentMetadata parse(String name) {
+    // Cache-Lookup
+    final cached = _parseCache[name];
+    if (cached != null) return cached;
+
+    // Eigentliches Parsing
+    final result = _parseInternal(name);
+
+    // Cache speichern (mit Größenlimit)
+    if (_parseCache.length >= _maxCacheSize) {
+      // Entferne älteste 20% der Einträge
+      final keysToRemove = _parseCache.keys.take(_maxCacheSize ~/ 5).toList();
+      for (final key in keysToRemove) {
+        _parseCache.remove(key);
+      }
+    }
+    _parseCache[name] = result;
+
+    return result;
+  }
+
+  /// Internes Parsing (ohne Cache)
+  static ContentMetadata _parseInternal(String name) {
     String cleanName = name;
     String? language;
     String? quality;
@@ -176,8 +308,8 @@ class ContentParser {
     bool isPopular = false;
     final tags = <String>[];
 
-    // Ländercode aus Präfix extrahieren (z.B. "DE:" → "DE")
-    final countryMatch = RegExp(r'^([A-Z]{2})\s*:', caseSensitive: false).firstMatch(name);
+    // Ländercode aus Präfix extrahieren
+    final countryMatch = _countryPrefixPattern.firstMatch(name);
     if (countryMatch != null) {
       final code = countryMatch.group(1)!.toUpperCase();
       if (countryCodes.contains(code)) {
@@ -185,165 +317,108 @@ class ContentParser {
       }
     }
 
-    // Sprache erkennen (aus original Name)
-    for (final entry in languageCodes.entries) {
-      final pattern = RegExp(
-        r'(?:^|\s|\||\[|\()' + entry.key + r'(?:\s|\||:|\-|\–|\—|\]|\)|$)',
-        caseSensitive: false,
-      );
-      if (pattern.hasMatch(name)) {
+    // Sprache erkennen (mit vorkompilierten Patterns)
+    for (final entry in _languagePatterns.entries) {
+      if (entry.value.hasMatch(name)) {
         language = entry.key;
         break;
       }
     }
 
-    // Qualität erkennen (aus original Name)
-    // 1. Zuerst Unicode-Varianten prüfen (ᵁᴴᴰ, ⁴ᴷ, etc.)
+    // Qualität erkennen
+    // 1. Zuerst Unicode-Varianten
     for (final entry in unicodeQualityTags.entries) {
       if (name.contains(entry.key)) {
         quality = entry.value;
         break;
       }
     }
-    // 2. Dann normale Qualitäts-Tags (4K:, HD, etc.)
+    // 2. Dann normale Tags
     if (quality == null) {
-      for (final q in qualityTags) {
-        final pattern = RegExp(r'(?:^|\b)' + q + r'(?:\b|:)', caseSensitive: false);
-        if (pattern.hasMatch(name)) {
-          quality = q.toUpperCase();
+      for (final entry in _qualityPatterns.entries) {
+        if (entry.value.hasMatch(name)) {
+          quality = entry.key.toUpperCase();
           break;
         }
       }
     }
-    // 3. Normalisiere Qualität: UHD, 2160p, 3840p → 4K | 4320p → 8K
+    // 3. Normalisieren
     if (quality == 'UHD' || quality == '2160P' || quality == '3840P') {
       quality = '4K';
     } else if (quality == '4320P') {
       quality = '8K';
     }
 
-    // Jahr erkennen (4-stellige Zahl zwischen 1900-2099)
+    // Jahr erkennen
     int? year;
-    final yearPattern = RegExp(r'\b(19\d{2}|20\d{2})\b');
-    final yearMatch = yearPattern.firstMatch(name);
+    final yearMatch = _yearPattern.firstMatch(name);
     if (yearMatch != null) {
       year = int.tryParse(yearMatch.group(1)!);
     }
 
-    // Popular Tags erkennen (nur als Präfix mit Trennzeichen, nicht "Top Gun")
-    for (final tag in popularTags) {
-      // Nur wenn am Anfang mit Trennzeichen danach
-      final pattern = RegExp(
-        '^' + tag + r'\s*[\-\–\—\|]',
-        caseSensitive: false,
-      );
-      if (pattern.hasMatch(name)) {
+    // Popular Tags erkennen
+    for (final entry in _popularPatterns.entries) {
+      if (entry.value.hasMatch(name)) {
         isPopular = true;
-        tags.add(tag);
-        break; // Ein Tag reicht
+        tags.add(entry.key);
+        break;
       }
     }
 
     // === BEREINIGUNG ===
 
-    // 0. Alle kleinen Unicode-Sonderzeichen entfernen (ᵁᴴᴰ, ᴾᴸ, ʰᵉᵛᶜ, ³⁸⁴⁰, etc.)
-    // Entfernt: Superscript (inkl. ¹²³), Subscript, Modifier Letters, etc.
-    cleanName = cleanName.replaceAll(
-      RegExp(r'[\u00B2\u00B3\u00B9\u1D00-\u1D7F\u1D80-\u1DBF\u2070-\u209F\u02B0-\u02FF]+'),
-      ' ',
-    );
-    cleanName = cleanName.trim();
+    // 0. Unicode-Sonderzeichen entfernen
+    cleanName = cleanName.replaceAll(_unicodeCleanPattern, ' ').trim();
 
-    // 1. ZUERST Qualitäts-Tags entfernen (4K, HD, 3840P, etc.)
-    // Diese können überall stehen und blockieren sonst die Prefix-Erkennung
-    for (final q in qualityTags) {
-      // Als Präfix mit Doppelpunkt (z.B. "4K: SENDER" bei Live-TV)
-      cleanName = cleanName.replaceAll(
-        RegExp('^' + q + r'\s*:\s*', caseSensitive: false),
-        '',
-      );
-      // Als eigenständiges Tag mit Leerzeichen/Trennzeichen drumherum (auch am Ende)
-      cleanName = cleanName.replaceAll(
-        RegExp(r'(?:^|\s)' + q + r'(?:\s*[\-\–\—\|:]\s*|\s+|$)', caseSensitive: false),
-        ' ',
-      );
-      // Auch am Ende des Strings ohne Trennzeichen (z.B. "RELAX 11 3840P")
-      cleanName = cleanName.replaceAll(
-        RegExp(r'\s+' + q + r'$', caseSensitive: false),
-        '',
-      );
+    // 1. Qualitäts-Tags entfernen
+    for (final patterns in _qualityRemovePatterns.values) {
+      for (final pattern in patterns) {
+        cleanName = cleanName.replaceAll(pattern, ' ');
+      }
     }
     cleanName = cleanName.trim();
 
-    // 2. Präfix-Tags am Anfang entfernen (iterativ, auch mehrere hintereinander)
-    // Sortiere nach Länge (längste zuerst), damit "CA EN:" vor "CA:" matched
-    final sortedPrefixes = List<String>.from(prefixTags)
-      ..sort((a, b) => b.length.compareTo(a.length));
-
+    // 2. Präfix-Tags entfernen (iterativ)
     bool foundPrefix = true;
     int iterations = 0;
     while (foundPrefix && iterations < 10) {
       foundPrefix = false;
       iterations++;
-
-      for (final tag in sortedPrefixes) {
-        // Pattern: Tag am Anfang, gefolgt von Trennzeichen (: - | etc.)
-        final escapedTag = RegExp.escape(tag);
-        final pattern = RegExp(
-          '^' + escapedTag + r'\s*[\-\–\—\|:]+\s*',
-          caseSensitive: false,
-        );
-
-        if (pattern.hasMatch(cleanName)) {
-          cleanName = cleanName.replaceFirst(pattern, '');
-          cleanName = cleanName.trim();
+      for (final entry in _prefixPatterns) {
+        if (entry.value.hasMatch(cleanName)) {
+          cleanName = cleanName.replaceFirst(entry.value, '').trim();
           foundPrefix = true;
           break;
         }
       }
     }
 
-    // 3. Popular-Tags entfernen (nur am Anfang/Ende mit Trennzeichen)
-    for (final tag in popularTags) {
-      cleanName = cleanName.replaceAll(
-        RegExp('^' + tag + _separatorPattern, caseSensitive: false),
-        '',
-      );
-      cleanName = cleanName.replaceAll(
-        RegExp(_separatorPattern + tag + r'$', caseSensitive: false),
-        '',
-      );
+    // 3. Popular-Tags entfernen
+    for (final patterns in _popularRemovePatterns.values) {
+      for (final pattern in patterns) {
+        cleanName = cleanName.replaceAll(pattern, '');
+      }
     }
 
-    // 4. Tags in Klammern entfernen: [TAG] oder (TAG)
-    cleanName = cleanName.replaceAll(
-      RegExp(r'\s*[\[\(][^\]\)]*[\]\)]\s*'),
-      ' ',
-    );
+    // 4. Tags in Klammern entfernen
+    cleanName = cleanName.replaceAll(_bracketsPattern, ' ');
 
-    // 5. Tags zwischen Pipes entfernen: |TAG|
-    cleanName = cleanName.replaceAll(
-      RegExp(r'\s*\|[^|]+\|\s*'),
-      ' ',
-    );
+    // 5. Tags zwischen Pipes entfernen
+    cleanName = cleanName.replaceAll(_pipesPattern, ' ');
 
-    // 6. Aufräumen (Doppelpunkte bleiben erhalten - gehören oft zum Titel)
+    // 6. Aufräumen
     cleanName = cleanName
-        // Mehrfache Trennzeichen (ohne Doppelpunkt) durch ein Leerzeichen
-        .replaceAll(RegExp(r'[\s\-\–\—\|]{2,}'), ' ')
-        // Trennzeichen am Anfang entfernen (ohne Doppelpunkt)
-        .replaceAll(RegExp(r'^[\s\-\–\—\|]+'), '')
-        // Trennzeichen am Ende entfernen (inkl. Doppelpunkt am Ende)
-        .replaceAll(RegExp(r'[\s\-\–\—\|:]+$'), '')
-        // Mehrfache Leerzeichen
-        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .replaceAll(_multiSeparatorPattern, ' ')
+        .replaceAll(_leadingSeparatorPattern, '')
+        .replaceAll(_trailingSeparatorPattern, '')
+        .replaceAll(_multiSpacePattern, ' ')
         .trim();
 
-    // Jahr aus cleanName entfernen (wenn erkannt)
+    // Jahr aus cleanName entfernen
     if (year != null) {
       cleanName = cleanName
           .replaceAll(RegExp(r'\s*[\(\[]?' + year.toString() + r'[\)\]]?\s*'), ' ')
-          .replaceAll(RegExp(r'\s{2,}'), ' ')
+          .replaceAll(_multiSpacePattern, ' ')
           .trim();
     }
 
@@ -382,7 +457,6 @@ class ContentParser {
       final metaA = parse(getName(a));
       final metaB = parse(getName(b));
 
-      // Bevorzugte Sprache zuerst
       if (preferredLanguage != null) {
         final aMatch = metaA.language == preferredLanguage.toUpperCase();
         final bMatch = metaB.language == preferredLanguage.toUpperCase();
@@ -390,11 +464,9 @@ class ContentParser {
         if (!aMatch && bMatch) return 1;
       }
 
-      // Dann beliebte Inhalte
       if (metaA.isPopular && !metaB.isPopular) return -1;
       if (!metaA.isPopular && metaB.isPopular) return 1;
 
-      // Dann nach Qualität (höher = besser)
       final qualityOrder = {'4K': 0, 'UHD': 0, '2160p': 0, 'FHD': 1, '1080p': 1, 'HD': 2, '720p': 2, 'SD': 3, '480p': 3};
       final qA = qualityOrder[metaA.quality] ?? 99;
       final qB = qualityOrder[metaB.quality] ?? 99;
@@ -404,7 +476,7 @@ class ContentParser {
     });
   }
 
-  /// Holt alle Inhalte mit einem bestimmten Tag (HOT, TOP, etc.)
+  /// Holt alle Inhalte mit einem bestimmten Tag
   static List<T> getPopular<T>(
     List<T> items,
     String Function(T) getName,
@@ -423,7 +495,7 @@ class ContentMetadata {
   final String? language;
   final String? languageDisplayName;
   final String? quality;
-  final String? country; // Ländercode aus Präfix (DE, UK, US, etc.)
+  final String? country;
   final int? year;
   final bool isPopular;
   final List<String> tags;
