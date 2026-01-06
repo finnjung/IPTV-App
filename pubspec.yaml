@@ -47,6 +47,7 @@ dependencies:
   cached_network_image: ^3.4.1
   shimmer: ^3.0.0
   flutter_svg: ^2.0.10
+  lottie: ^3.3.1
 
   # State Management
   provider: ^6.1.2
@@ -81,6 +82,7 @@ flutter:
 
   assets:
     - assets/icons/
+    - assets/animations/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

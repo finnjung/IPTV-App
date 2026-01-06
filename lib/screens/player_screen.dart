@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lottie/lottie.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -59,12 +60,16 @@ class _PlayerScreenState extends State<PlayerScreen>
   late AnimationController _skipLeftController;
   late AnimationController _skipRightController;
   late AnimationController _pauseTitleController;
+  late AnimationController _playPauseController;
 
   // Watch Progress
   Timer? _saveProgressTimer;
   WatchProgress? _existingProgress;
   bool _hasShownResumeDialog = false;
   late XtreamService _xtreamService;
+
+  // Keyboard Focus
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
@@ -81,6 +86,17 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _pauseTitleController = AnimationController(
       duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    // Play/Pause Lottie Animation Controller
+    // Animation: Frame 5 = Play-Icon, Frame 27 = Pause-Icon
+    // Wir begrenzen den Controller auf diesen Bereich
+    _playPauseController = AnimationController(
+      value: 5 / 67, // Start bei Play-Icon (Video ist initial pausiert)
+      lowerBound: 5 / 67,  // Frame 5 = Play-Icon
+      upperBound: 27 / 67, // Frame 27 = Pause-Icon
+      duration: const Duration(milliseconds: 350),
       vsync: this,
     );
 
@@ -136,6 +152,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               _startHideControlsTimer();
               _startSaveProgressTimer();
 
+              // Sync Play/Pause animation: zeige Pause-Icon (Video spielt)
+              _playPauseController.forward();
+
               // Cancel pause title animation
               _pauseTitleTimer?.cancel();
               _showPauseTitle = false;
@@ -149,6 +168,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             } else {
               _cancelHideControlsTimer();
               _showControls();
+
+              // Sync Play/Pause animation: zeige Play-Icon (Video pausiert)
+              _playPauseController.reverse();
 
               // Start pause title timer (3 seconds delay)
               _pauseTitleTimer?.cancel();
@@ -301,6 +323,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _skipLeftController.dispose();
     _skipRightController.dispose();
     _pauseTitleController.dispose();
+    _playPauseController.dispose();
+    _focusNode.dispose();
 
     // Save final progress before closing (fire and forget)
     _saveFinalProgress();
@@ -373,6 +397,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _handleTapPlayPause() {
     // Einfacher Tap = Play/Pause
+    // Animation wird über den Player-Stream-Listener synchronisiert
     if (_player.state.playing) {
       _player.pause();
     } else {
@@ -415,14 +440,49 @@ class _PlayerScreenState extends State<PlayerScreen>
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    // Nur auf KeyDown reagieren (nicht KeyUp)
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Leertaste = Play/Pause
+    if (event.logicalKey == LogicalKeyboardKey.space) {
+      _handleTapPlayPause();
+      return KeyEventResult.handled;
+    }
+
+    // Pfeiltaste links = 10 Sek zurück
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _skipBackward();
+      return KeyEventResult.handled;
+    }
+
+    // Pfeiltaste rechts = 10 Sek vor
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _skipForward();
+      return KeyEventResult.handled;
+    }
+
+    // Escape = Zurück
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.pop(context);
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: MouseRegion(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: MouseRegion(
         onEnter: (_) => _showControls(),
         onHover: (_) {
           if (!_controlsVisible) _showControls();
@@ -595,6 +655,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -778,18 +839,16 @@ class _PlayerScreenState extends State<PlayerScreen>
 
         const SizedBox(width: 32),
 
-        // Play/Pause (nutzt _isPaused State statt Stream für korrektes Icon)
+        // Play/Pause mit Lottie Animation
         GestureDetector(
           onTap: _handleTapPlayPause,
-          child: SvgPicture.asset(
-            _isPaused
-                ? 'assets/icons/play.svg'
-                : 'assets/icons/pause.svg',
-            width: 56,
-            height: 56,
-            colorFilter: const ColorFilter.mode(
-              Colors.white,
-              BlendMode.srcIn,
+          child: SizedBox(
+            width: 72,
+            height: 72,
+            child: Lottie.asset(
+              'assets/animations/play_pause.json',
+              controller: _playPauseController,
+              fit: BoxFit.contain,
             ),
           ),
         ),
