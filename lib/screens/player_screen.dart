@@ -72,9 +72,36 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Keyboard Focus
   final FocusNode _focusNode = FocusNode();
 
+  // Live TV Channel Switching (alphabetisch sortiert)
+  List<_LiveChannel> _allLiveChannels = [];
+  int _currentChannelIndex = 0;
+  String _currentTitle = '';
+  String _currentStreamUrl = '';
+  String? _currentContentId;
+  String? _currentImageUrl;
+
+  // Volume & Playback Speed
+  double _volume = 1.0;
+  bool _isMuted = false;
+  double _playbackSpeed = 1.0;
+
+  // Volume/Speed Overlay
+  String? _overlayText;
+  Timer? _overlayTimer;
+
+  // Cursor auto-hide (Desktop)
+  bool _cursorVisible = true;
+  Timer? _hideCursorTimer;
+
   @override
   void initState() {
     super.initState();
+
+    // Initialize current channel info
+    _currentTitle = widget.title;
+    _currentStreamUrl = widget.streamUrl;
+    _currentContentId = widget.contentId;
+    _currentImageUrl = widget.imageUrl;
 
     // Animation Controllers für Skip-Feedback
     _skipLeftController = AnimationController(
@@ -116,6 +143,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     // Cache the service for later use in dispose
     _xtreamService = context.read<XtreamService>();
 
+    // Load all live channels for channel switching (only for live content)
+    if (widget.contentType == ContentType.live) {
+      _loadLiveChannels();
+    }
+
     // Check for existing progress
     _checkExistingProgress();
 
@@ -123,6 +155,31 @@ class _PlayerScreenState extends State<PlayerScreen>
     _checkFullscreenStatus();
 
     _initPlayer();
+  }
+
+  void _loadLiveChannels() {
+    // Verwende die bereits geladene und sortierte Liste aus liveTvScreenContent
+    final content = _xtreamService.liveTvScreenContent;
+    if (content == null || content.allStreamsSorted.isEmpty) return;
+
+    // Liste ist bereits alphabetisch sortiert
+    _allLiveChannels = content.allStreamsSorted.map((stream) {
+      final url = _xtreamService.getLiveStreamUrl(stream);
+      return _LiveChannel(
+        title: stream.name ?? 'Unbekannt',
+        streamUrl: url ?? '',
+        contentId: 'live_${stream.streamId}',
+        imageUrl: stream.streamIcon,
+      );
+    }).where((ch) => ch.streamUrl.isNotEmpty).toList();
+
+    // Aktuellen Kanal in der Liste finden (anhand der contentId)
+    if (widget.contentId != null) {
+      _currentChannelIndex = _allLiveChannels.indexWhere(
+        (ch) => ch.contentId == widget.contentId,
+      );
+      if (_currentChannelIndex < 0) _currentChannelIndex = 0;
+    }
   }
 
   void _checkExistingProgress() {
@@ -187,6 +244,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             } else {
               _cancelHideControlsTimer();
               _showControls();
+
+              // Cursor beim Pausieren anzeigen
+              _hideCursorTimer?.cancel();
+              setState(() => _cursorVisible = true);
 
               // Sync Play/Pause animation: zeige Play-Icon (Video pausiert)
               _playPauseController.reverse();
@@ -348,6 +409,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _hideControlsTimer?.cancel();
     _saveProgressTimer?.cancel();
     _pauseTitleTimer?.cancel();
+    _overlayTimer?.cancel();
+    _hideCursorTimer?.cancel();
     _skipLeftController.dispose();
     _skipRightController.dispose();
     _pauseTitleController.dispose();
@@ -389,6 +452,25 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _controlsVisible = true);
     if (!_isPaused) {
       _startHideControlsTimer();
+    }
+  }
+
+  void _showCursor() {
+    if (!_cursorVisible) {
+      setState(() => _cursorVisible = true);
+    }
+    _startHideCursorTimer();
+  }
+
+  void _startHideCursorTimer() {
+    _hideCursorTimer?.cancel();
+    // Cursor ausblenden wenn Video spielt
+    if (!_isPaused) {
+      _hideCursorTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted && !_isPaused) {
+          setState(() => _cursorVisible = false);
+        }
+      });
     }
   }
 
@@ -457,6 +539,103 @@ class _PlayerScreenState extends State<PlayerScreen>
     _showControls();
   }
 
+  void _showOverlay(String text) {
+    setState(() => _overlayText = text);
+    _overlayTimer?.cancel();
+    _overlayTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) setState(() => _overlayText = null);
+    });
+  }
+
+  void _setVolume(double volume) {
+    _volume = volume.clamp(0.0, 1.0);
+    _player.setVolume(_volume * 100);
+    _isMuted = _volume == 0;
+    final percent = (_volume * 100).round();
+    _showOverlay('Lautstärke: $percent%');
+  }
+
+  void _toggleMute() {
+    if (_isMuted) {
+      _isMuted = false;
+      _player.setVolume(_volume * 100);
+      _showOverlay('Ton an');
+    } else {
+      _isMuted = true;
+      _player.setVolume(0);
+      _showOverlay('Stumm');
+    }
+    setState(() {});
+  }
+
+  void _setPlaybackSpeed(double speed) {
+    _playbackSpeed = speed.clamp(0.25, 2.0);
+    _player.setRate(_playbackSpeed);
+    _showOverlay('${_playbackSpeed}x');
+    setState(() {});
+  }
+
+  void _seekToPercent(int percent) {
+    final duration = _player.state.duration;
+    if (duration.inSeconds < 1) return;
+    final position = Duration(milliseconds: (duration.inMilliseconds * percent / 100).round());
+    _player.seek(position);
+    _showOverlay('$percent%');
+  }
+
+  // Channel switching (Live TV only - alphabetisch sortiert)
+  bool get _hasChannels => _allLiveChannels.length > 1;
+
+  void _switchToChannel(int index) {
+    if (!_hasChannels) return;
+
+    // Wrap around
+    if (index < 0) index = _allLiveChannels.length - 1;
+    if (index >= _allLiveChannels.length) index = 0;
+
+    if (index == _currentChannelIndex) return;
+
+    final channel = _allLiveChannels[index];
+    setState(() {
+      _currentChannelIndex = index;
+      _currentTitle = channel.title;
+      _currentStreamUrl = channel.streamUrl;
+      _currentContentId = channel.contentId;
+      _currentImageUrl = channel.imageUrl;
+      _isLoading = true;
+      _error = null;
+    });
+
+    // Reload player with new URL
+    _reloadPlayer();
+  }
+
+  void _nextChannel() {
+    _switchToChannel(_currentChannelIndex + 1);
+  }
+
+  void _previousChannel() {
+    _switchToChannel(_currentChannelIndex - 1);
+  }
+
+  Future<void> _reloadPlayer() async {
+    try {
+      String cleanUrl = _currentStreamUrl;
+      while (cleanUrl.endsWith('.') || cleanUrl.endsWith(' ')) {
+        cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
+      }
+      await _player.open(Media(cleanUrl));
+    } catch (e) {
+      debugPrint('Channel switch error: $e');
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
@@ -472,27 +651,125 @@ class _PlayerScreenState extends State<PlayerScreen>
     // Nur auf KeyDown reagieren (nicht KeyUp)
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // Leertaste = Play/Pause
-    if (event.logicalKey == LogicalKeyboardKey.space) {
+    final key = event.logicalKey;
+
+    // Leertaste oder K = Play/Pause
+    if (key == LogicalKeyboardKey.space || key == LogicalKeyboardKey.keyK) {
       _handleTapPlayPause();
       return KeyEventResult.handled;
     }
 
-    // Pfeiltaste links = 10 Sek zurück
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+    // Pfeiltaste links oder J = 10 Sek zurück
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.keyJ) {
       _skipBackward();
       return KeyEventResult.handled;
     }
 
-    // Pfeiltaste rechts = 10 Sek vor
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+    // Pfeiltaste rechts oder L = 10 Sek vor
+    if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.keyL) {
       _skipForward();
       return KeyEventResult.handled;
     }
 
-    // Escape = Zurück
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      Navigator.pop(context);
+    // Pfeiltaste hoch = Lautstärke +10%
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _setVolume(_volume + 0.1);
+      return KeyEventResult.handled;
+    }
+
+    // Pfeiltaste runter = Lautstärke -10%
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _setVolume(_volume - 0.1);
+      return KeyEventResult.handled;
+    }
+
+    // M = Stummschalten
+    if (key == LogicalKeyboardKey.keyM) {
+      _toggleMute();
+      return KeyEventResult.handled;
+    }
+
+    // F = Vollbild ein/aus
+    if (key == LogicalKeyboardKey.keyF) {
+      _toggleFullscreen();
+      return KeyEventResult.handled;
+    }
+
+    // < (Komma) = Geschwindigkeit langsamer
+    if (key == LogicalKeyboardKey.comma) {
+      _setPlaybackSpeed(_playbackSpeed - 0.25);
+      return KeyEventResult.handled;
+    }
+
+    // > (Punkt) = Geschwindigkeit schneller
+    if (key == LogicalKeyboardKey.period) {
+      _setPlaybackSpeed(_playbackSpeed + 0.25);
+      return KeyEventResult.handled;
+    }
+
+    // 0-9 = Zu Position springen
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
+      _seekToPercent(0);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
+      _seekToPercent(10);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
+      _seekToPercent(20);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit3 || key == LogicalKeyboardKey.numpad3) {
+      _seekToPercent(30);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit4 || key == LogicalKeyboardKey.numpad4) {
+      _seekToPercent(40);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit5 || key == LogicalKeyboardKey.numpad5) {
+      _seekToPercent(50);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit6 || key == LogicalKeyboardKey.numpad6) {
+      _seekToPercent(60);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit7 || key == LogicalKeyboardKey.numpad7) {
+      _seekToPercent(70);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit8 || key == LogicalKeyboardKey.numpad8) {
+      _seekToPercent(80);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit9 || key == LogicalKeyboardKey.numpad9) {
+      _seekToPercent(90);
+      return KeyEventResult.handled;
+    }
+
+    // Channel +/- (Live TV only)
+    if (_hasChannels) {
+      // Page Up / N = nächster Kanal
+      if (key == LogicalKeyboardKey.pageUp || key == LogicalKeyboardKey.keyN) {
+        _nextChannel();
+        return KeyEventResult.handled;
+      }
+      // Page Down / P = vorheriger Kanal
+      if (key == LogicalKeyboardKey.pageDown || key == LogicalKeyboardKey.keyP) {
+        _previousChannel();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // Escape = Vollbild verlassen (falls aktiv), sonst Zurück
+    if (key == LogicalKeyboardKey.escape) {
+      if (_isFullscreen) {
+        _toggleFullscreen();
+      } else {
+        Navigator.pop(context);
+      }
       return KeyEventResult.handled;
     }
 
@@ -511,9 +788,20 @@ class _PlayerScreenState extends State<PlayerScreen>
       child: Scaffold(
         backgroundColor: Colors.black,
         body: MouseRegion(
-        onEnter: (_) => _showControls(),
+        cursor: _cursorVisible ? SystemMouseCursors.basic : SystemMouseCursors.none,
+        onEnter: (_) {
+          _showControls();
+          _showCursor();
+        },
         onHover: (_) {
+          _showCursor();
           if (!_controlsVisible) _showControls();
+          // Bei Mausbewegung Pause-Titel smooth ausblenden
+          if (_showPauseTitle) {
+            _pauseTitleController.animateTo(0, duration: const Duration(milliseconds: 300)).then((_) {
+              if (mounted) setState(() => _showPauseTitle = false);
+            });
+          }
         },
         child: Stack(
           children: [
@@ -565,6 +853,26 @@ class _PlayerScreenState extends State<PlayerScreen>
               child: _buildSkipIndicator(10, _skipRightController),
             ),
 
+          // Volume/Speed Overlay
+          if (_overlayText != null)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(180),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _overlayText!,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
           // Loading indicator
           if (_isLoading)
             Center(
@@ -601,18 +909,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                         ),
                       ),
                     ),
-                    // Titel - oben positioniert mit cineastischer Schrift
-                    Positioned(
-                      top: 80,
-                      left: 32,
-                      right: 32,
-                      child: Opacity(
-                        opacity: _pauseTitleController.value * 0.55,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              widget.title.toUpperCase(),
+                    // Titel - mittig positioniert mit cineastischer Schrift
+                    Positioned.fill(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Opacity(
+                            opacity: _pauseTitleController.value * 0.55,
+                            child: Text(
+                              _currentTitle.toUpperCase(),
                               style: GoogleFonts.anton(
                                 color: Colors.white,
                                 fontSize: 140,
@@ -623,19 +928,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (widget.subtitle != null) ...[
-                              const SizedBox(height: 16),
-                              Text(
-                                widget.subtitle!,
-                                style: GoogleFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w300,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                            ],
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -650,36 +943,41 @@ class _PlayerScreenState extends State<PlayerScreen>
             duration: const Duration(milliseconds: 300),
             child: IgnorePointer(
               ignoring: !_controlsVisible,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withAlpha(180),
-                      Colors.transparent,
-                      Colors.transparent,
-                      Colors.black.withAlpha(200),
-                    ],
-                    stops: const [0.0, 0.25, 0.7, 1.0],
+              child: GestureDetector(
+                // Tap auf leeren Bereich = Play/Pause
+                onTap: _handleTapPlayPause,
+                behavior: HitTestBehavior.translucent,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withAlpha(180),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withAlpha(200),
+                      ],
+                      stops: const [0.0, 0.25, 0.7, 1.0],
+                    ),
                   ),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    children: [
-                      // Top bar
-                      _buildTopBar(),
+                  child: SafeArea(
+                    child: Column(
+                      children: [
+                        // Top bar
+                        _buildTopBar(),
 
-                      const Spacer(),
+                        const Spacer(),
 
-                      // Center controls (nicht beim Laden oder Fehler)
-                      if (!_isLoading && _error == null) _buildCenterControls(colorScheme),
+                        // Center controls (nicht beim Laden, Fehler oder Pause-Titel)
+                        if (!_isLoading && _error == null && !_showPauseTitle) _buildCenterControls(colorScheme),
 
-                      const Spacer(),
+                        const Spacer(),
 
-                      // Bottom controls mit Seek-Bar (nicht bei Fehler)
-                      if (_error == null) _buildBottomControls(colorScheme),
-                    ],
+                        // Bottom controls mit Seek-Bar (nicht bei Fehler)
+                        if (_error == null) _buildBottomControls(colorScheme),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -850,15 +1148,16 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     // Bestimme Favoriten-ID basierend auf Content-Type
     String? favoriteId;
-    if (widget.contentId != null) {
+    final contentId = _currentContentId ?? widget.contentId;
+    if (contentId != null) {
       if (widget.contentType == ContentType.series) {
         // Format: series_seriesId_season_episode -> extrahiere series_seriesId
-        final parts = widget.contentId!.split('_');
+        final parts = contentId.split('_');
         if (parts.length >= 2) {
           favoriteId = '${parts[0]}_${parts[1]}';
         }
       } else {
-        favoriteId = widget.contentId;
+        favoriteId = contentId;
       }
     }
 
@@ -886,7 +1185,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.title,
+                  _currentTitle,
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 16,
@@ -910,7 +1209,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           ),
           const SizedBox(width: 8),
           // Favoriten-Button
-          if (widget.contentId != null)
+          if (contentId != null)
             IconButton(
               onPressed: () => _toggleFavorite(xtreamService),
               icon: Container(
@@ -1048,15 +1347,34 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _buildBottomControls(ColorScheme colorScheme) {
     final isLive = widget.contentType == ContentType.live;
 
-    // Bei Live-Streams: LIVE-Badge unten links
+    // Bei Live-Streams: Channel-Buttons mit LIVE-Badge in der Mitte
     if (isLive) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 16, 24),
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Previous channel (nur wenn Kanäle vorhanden)
+            if (_hasChannels)
+              IconButton(
+                onPressed: _previousChannel,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white.withAlpha(30),
+                ),
+                icon: SvgPicture.asset(
+                  'assets/icons/caret-left.svg',
+                  width: 24,
+                  height: 24,
+                  colorFilter: const ColorFilter.mode(
+                    Colors.white,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+            if (_hasChannels) const SizedBox(width: 16),
+            // LIVE Badge (mittig)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.red,
                 borderRadius: BorderRadius.circular(4),
@@ -1085,6 +1403,24 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ],
               ),
             ),
+            if (_hasChannels) const SizedBox(width: 16),
+            // Next channel (nur wenn Kanäle vorhanden)
+            if (_hasChannels)
+              IconButton(
+                onPressed: _nextChannel,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white.withAlpha(30),
+                ),
+                icon: SvgPicture.asset(
+                  'assets/icons/caret-right.svg',
+                  width: 24,
+                  height: 24,
+                  colorFilter: const ColorFilter.mode(
+                    Colors.white,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
           ],
         ),
       );
@@ -1174,4 +1510,19 @@ class _PlayerScreenState extends State<PlayerScreen>
       ),
     );
   }
+}
+
+/// Internal class for live channel info
+class _LiveChannel {
+  final String title;
+  final String streamUrl;
+  final String? contentId;
+  final String? imageUrl;
+
+  const _LiveChannel({
+    required this.title,
+    required this.streamUrl,
+    this.contentId,
+    this.imageUrl,
+  });
 }
