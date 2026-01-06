@@ -11,6 +11,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../models/watch_progress.dart';
+import '../models/favorite.dart';
 import '../services/xtream_service.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -191,7 +192,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       });
 
-      await _player.open(Media(widget.streamUrl));
+      // URL bereinigen (trailing Punkt entfernen, kann bei manchen Quellen vorkommen)
+      String cleanUrl = widget.streamUrl;
+      while (cleanUrl.endsWith('.') || cleanUrl.endsWith(' ')) {
+        cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
+      }
+      debugPrint('Clean URL: $cleanUrl');
+
+      await _player.open(Media(cleanUrl));
     } catch (e) {
       debugPrint('Player init error: $e');
       if (mounted) {
@@ -558,9 +566,6 @@ class _PlayerScreenState extends State<PlayerScreen>
               ),
             ),
 
-          // Error
-          if (_error != null) _buildErrorWidget(colorScheme),
-
           // Großer Titel bei Pause (nach 3 Sekunden mit Fade-In und Abdunkelung)
           if (_showPauseTitle && _isPaused && !_isLoading && _error == null)
             AnimatedBuilder(
@@ -576,30 +581,37 @@ class _PlayerScreenState extends State<PlayerScreen>
                         ),
                       ),
                     ),
-                    // Titel
-                    Center(
+                    // Titel - oben positioniert mit cineastischer Schrift
+                    Positioned(
+                      top: 80,
+                      left: 32,
+                      right: 32,
                       child: Opacity(
-                        opacity: _pauseTitleController.value,
+                        opacity: _pauseTitleController.value * 0.55,
                         child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
-                              widget.title,
-                              style: GoogleFonts.poppins(
+                              widget.title.toUpperCase(),
+                              style: GoogleFonts.anton(
                                 color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 140,
+                                letterSpacing: 1,
+                                height: 0.9,
                               ),
                               textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             if (widget.subtitle != null) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 16),
                               Text(
                                 widget.subtitle!,
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white70,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w300,
+                                  letterSpacing: 2,
                                 ),
                               ),
                             ],
@@ -640,19 +652,22 @@ class _PlayerScreenState extends State<PlayerScreen>
 
                       const Spacer(),
 
-                      // Center controls (nicht beim Laden)
-                      if (!_isLoading) _buildCenterControls(colorScheme),
+                      // Center controls (nicht beim Laden oder Fehler)
+                      if (!_isLoading && _error == null) _buildCenterControls(colorScheme),
 
                       const Spacer(),
 
-                      // Bottom controls mit Seek-Bar
-                      _buildBottomControls(colorScheme),
+                      // Bottom controls mit Seek-Bar (nicht bei Fehler)
+                      if (_error == null) _buildBottomControls(colorScheme),
                     ],
                   ),
                 ),
               ),
             ),
           ),
+
+          // Error - MUSS am Ende des Stacks sein, damit es über allem liegt
+          if (_error != null) _buildErrorWidget(colorScheme),
           ],
         ),
       ),
@@ -706,52 +721,129 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _buildErrorWidget(ColorScheme colorScheme) {
-    return Center(
+    // Fehlermeldung kürzen (nur den relevanten Teil anzeigen)
+    String errorMessage = _error ?? 'Unbekannter Fehler';
+    if (errorMessage.contains('Failed to open')) {
+      errorMessage = 'Stream konnte nicht geöffnet werden.\nDer Inhalt ist möglicherweise nicht verfügbar.';
+    }
+
+    return GestureDetector(
+      // Verhindert, dass Taps zu den darunterliegenden Controls durchgereicht werden
+      onTap: () {},
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        margin: const EdgeInsets.all(32),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.black.withAlpha(200),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              color: colorScheme.error,
-              size: 48,
+        color: Colors.black.withAlpha(220),
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.grey[900],
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white12),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Wiedergabefehler',
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.error.withAlpha(30),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.error_outline_rounded,
+                    color: colorScheme.error,
+                    size: 48,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Wiedergabefehler',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  errorMessage,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Erneut versuchen
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _error = null;
+                          _isLoading = true;
+                        });
+                        _initPlayer();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: const BorderSide(color: Colors.white30),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 20),
+                      label: Text(
+                        'Erneut versuchen',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Zurück
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                      label: Text(
+                        'Zurück',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: GoogleFonts.poppins(
-                color: Colors.white70,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Zurück'),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildTopBar() {
+    final xtreamService = context.watch<XtreamService>();
+
+    // Bestimme Favoriten-ID basierend auf Content-Type
+    String? favoriteId;
+    if (widget.contentId != null) {
+      if (widget.contentType == ContentType.series) {
+        // Format: series_seriesId_season_episode -> extrahiere series_seriesId
+        final parts = widget.contentId!.split('_');
+        if (parts.length >= 2) {
+          favoriteId = '${parts[0]}_${parts[1]}';
+        }
+      } else {
+        favoriteId = widget.contentId;
+      }
+    }
+
+    final isFavorite = favoriteId != null && xtreamService.isFavorite(favoriteId);
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -797,6 +889,27 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
           ),
           const SizedBox(width: 8),
+          // Favoriten-Button
+          if (widget.contentId != null)
+            IconButton(
+              onPressed: () => _toggleFavorite(xtreamService),
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isFavorite ? Colors.red.withAlpha(200) : Colors.white.withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: SvgPicture.asset(
+                  'assets/icons/heart.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: const ColorFilter.mode(
+                    Colors.white,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+            ),
           // Fullscreen toggle (nur auf Desktop)
           if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux))
             IconButton(
@@ -816,6 +929,45 @@ class _PlayerScreenState extends State<PlayerScreen>
         ],
       ),
     );
+  }
+
+  void _toggleFavorite(XtreamService xtreamService) {
+    if (widget.contentId == null) return;
+
+    Favorite favorite;
+
+    switch (widget.contentType) {
+      case ContentType.movie:
+        // Extract streamId from movie_123
+        final streamId = int.tryParse(widget.contentId!.replaceFirst('movie_', '')) ?? 0;
+        favorite = Favorite.fromMovie(
+          streamId: streamId,
+          title: widget.title,
+          imageUrl: widget.imageUrl,
+        );
+        break;
+      case ContentType.series:
+        // Extract seriesId from series_123_season_episode
+        final parts = widget.contentId!.split('_');
+        final seriesId = parts.length >= 2 ? int.tryParse(parts[1]) ?? 0 : 0;
+        favorite = Favorite.fromSeries(
+          seriesId: seriesId,
+          title: widget.title,
+          imageUrl: widget.imageUrl,
+        );
+        break;
+      case ContentType.live:
+        // Extract streamId from live_123
+        final streamId = int.tryParse(widget.contentId!.replaceFirst('live_', '')) ?? 0;
+        favorite = Favorite.fromLiveStream(
+          streamId: streamId,
+          title: widget.title,
+          imageUrl: widget.imageUrl,
+        );
+        break;
+    }
+
+    xtreamService.toggleFavorite(favorite);
   }
 
   Widget _buildCenterControls(ColorScheme colorScheme) {

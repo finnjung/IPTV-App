@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import 'cors_proxy_client.dart';
 import '../models/watch_progress.dart';
+import '../models/favorite.dart';
 import '../utils/content_parser.dart';
 
 class XtreamCredentials {
@@ -52,6 +54,9 @@ class XtreamService extends ChangeNotifier {
   // Watch Progress - Fortschritt beim Schauen
   List<WatchProgress> _watchProgress = [];
 
+  // Favoriten
+  List<Favorite> _favorites = [];
+
   // Bevorzugte Sprache für Content
   String? _preferredLanguage;
 
@@ -93,6 +98,10 @@ class XtreamService extends ChangeNotifier {
       .toList()
     ..sort((a, b) => b.lastWatched.compareTo(a.lastWatched));
 
+  // Sortiert nach Hinzufüge-Zeitpunkt (neueste zuerst)
+  List<Favorite> get favorites => List<Favorite>.from(_favorites)
+    ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
+
   XtreamCodeClient? get client {
     try {
       return XtreamCode.instance.client;
@@ -114,6 +123,9 @@ class XtreamService extends ChangeNotifier {
 
     // Watch Progress laden
     await _loadWatchProgress();
+
+    // Favoriten laden
+    await _loadFavorites();
 
     // Bevorzugte Sprache laden
     _preferredLanguage = prefs.getString('preferred_language');
@@ -320,6 +332,28 @@ class XtreamService extends ChangeNotifier {
     }
   }
 
+  /// Gets series info directly by seriesId (for favorites navigation)
+  Future<XTremeCodeSeriesInfo?> getSeriesInfoById(int seriesId) async {
+    if (!_isConnected || client == null) return null;
+
+    try {
+      // The xtream_code_client only uses seriesId from the item,
+      // so we can fetch by making a direct HTTP request
+      final baseUrl = client!.baseUrl;
+      final response = await http.get(
+        Uri.parse('$baseUrl&action=get_series_info&series_id=$seriesId'),
+      );
+      if (response.statusCode == 200) {
+        final parsed = jsonDecode(response.body) as Map<String, dynamic>;
+        return XTremeCodeSeriesInfo.fromJson(parsed);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error loading series info by ID: $e');
+      return null;
+    }
+  }
+
   Future<XTremeCodeVodInfo?> getMovieInfo(XTremeCodeVodItem movie) async {
     if (!_isConnected || client == null) return null;
 
@@ -344,7 +378,13 @@ class XtreamService extends ChangeNotifier {
   String? getMovieUrl(int streamId, {String container = 'mp4'}) {
     if (client == null) return null;
     try {
-      return client!.movieUrl(streamId, container);
+      // Container bereinigen (Punkte, Leerzeichen entfernen - manche APIs liefern ".mp4" statt "mp4")
+      String cleanContainer = container.replaceAll('.', '').replaceAll(' ', '').trim();
+      if (cleanContainer.isEmpty) cleanContainer = 'mp4';
+
+      final url = client!.movieUrl(streamId, cleanContainer);
+      debugPrint('Movie URL: $url (container: "$container" -> "$cleanContainer")');
+      return url;
     } catch (e) {
       debugPrint('Error getting movie URL: $e');
       return null;
@@ -354,7 +394,13 @@ class XtreamService extends ChangeNotifier {
   String? getSeriesEpisodeUrl(int episodeId, {String container = 'mp4'}) {
     if (client == null) return null;
     try {
-      return client!.seriesUrl(episodeId, container);
+      // Container bereinigen (Punkte, Leerzeichen entfernen)
+      String cleanContainer = container.replaceAll('.', '').replaceAll(' ', '').trim();
+      if (cleanContainer.isEmpty) cleanContainer = 'mp4';
+
+      final url = client!.seriesUrl(episodeId, cleanContainer);
+      debugPrint('Episode URL: $url (container: "$container" -> "$cleanContainer")');
+      return url;
     } catch (e) {
       debugPrint('Error getting episode URL: $e');
       return null;
@@ -520,6 +566,71 @@ class XtreamService extends ChangeNotifier {
     _watchProgress.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('watch_progress');
+    notifyListeners();
+  }
+
+  // ==================== Favoriten ====================
+
+  /// Lädt die gespeicherten Favoriten
+  Future<void> _loadFavorites() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('favorites');
+      if (json != null) {
+        _favorites = Favorite.decodeList(json);
+        debugPrint('Loaded ${_favorites.length} favorites');
+      }
+    } catch (e) {
+      debugPrint('Error loading favorites: $e');
+      _favorites = [];
+    }
+  }
+
+  /// Speichert die Favoriten
+  Future<void> _saveFavorites() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('favorites', Favorite.encodeList(_favorites));
+    } catch (e) {
+      debugPrint('Error saving favorites: $e');
+    }
+  }
+
+  /// Fügt einen Favoriten hinzu
+  Future<void> addFavorite(Favorite favorite) async {
+    if (!_favorites.any((f) => f.id == favorite.id)) {
+      _favorites.add(favorite);
+      await _saveFavorites();
+      notifyListeners();
+    }
+  }
+
+  /// Entfernt einen Favoriten
+  Future<void> removeFavorite(String id) async {
+    _favorites.removeWhere((f) => f.id == id);
+    await _saveFavorites();
+    notifyListeners();
+  }
+
+  /// Prüft ob ein Item ein Favorit ist
+  bool isFavorite(String id) {
+    return _favorites.any((f) => f.id == id);
+  }
+
+  /// Toggle: Fügt hinzu oder entfernt Favorit
+  Future<void> toggleFavorite(Favorite favorite) async {
+    if (isFavorite(favorite.id)) {
+      await removeFavorite(favorite.id);
+    } else {
+      await addFavorite(favorite);
+    }
+  }
+
+  /// Löscht alle Favoriten
+  Future<void> clearAllFavorites() async {
+    _favorites.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('favorites');
     notifyListeners();
   }
 
