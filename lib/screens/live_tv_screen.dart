@@ -9,6 +9,8 @@ import '../widgets/content_card.dart';
 import '../widgets/sticky_glass_header.dart';
 import '../widgets/section_header.dart';
 import '../widgets/responsive_grid.dart';
+import '../models/favorite.dart';
+import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
 import 'player_screen.dart';
 
@@ -48,6 +50,9 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
             title: metadata.cleanName,
             subtitle: null,
             streamUrl: url,
+            contentId: 'live_${stream.streamId}',
+            imageUrl: stream.streamIcon,
+            contentType: ContentType.live,
           ),
         ),
       );
@@ -282,7 +287,10 @@ class _LiveTvCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.watch<XtreamService>();
     final metadata = ContentParser.parse(stream.name ?? '');
+    final favoriteId = 'live_${stream.streamId}';
+    final isFavorite = xtreamService.isFavorite(favoriteId);
 
     return GestureDetector(
       onTap: onTap,
@@ -364,41 +372,75 @@ class _LiveTvCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Country Badge
-              if (metadata.country != null)
-                Positioned(
-                  top: 6,
-                  right: 6,
+              // Favorite button (top right)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: () {
+                    final favorite = Favorite.fromLiveStream(
+                      streamId: stream.streamId ?? 0,
+                      title: stream.name ?? '',
+                      imageUrl: stream.streamIcon,
+                    );
+                    xtreamService.toggleFavorite(favorite);
+                  },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(
-                      metadata.country!,
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                    child: SvgPicture.asset(
+                      isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                      width: 14,
+                      height: 14,
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
                       ),
                     ),
                   ),
                 ),
+              ),
               // Title at bottom
               Positioned(
                 left: 8,
                 right: 8,
                 bottom: 8,
-                child: Text(
-                  metadata.cleanName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        metadata.cleanName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (metadata.country != null) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          metadata.country!,
+                          style: GoogleFonts.poppins(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],

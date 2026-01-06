@@ -9,6 +9,7 @@ import '../widgets/content_card.dart';
 import '../widgets/sticky_glass_header.dart';
 import '../widgets/section_header.dart';
 import '../widgets/responsive_grid.dart';
+import '../models/favorite.dart';
 import '../utils/content_parser.dart';
 import 'series_detail_screen.dart';
 
@@ -271,7 +272,10 @@ class _SeriesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.watch<XtreamService>();
     final metadata = ContentParser.parse(series.name ?? '');
+    final favoriteId = 'series_${series.seriesId}';
+    final isFavorite = xtreamService.isFavorite(favoriteId);
 
     return GestureDetector(
       onTap: onTap,
@@ -319,7 +323,38 @@ class _SeriesCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Tags
+              // Favorite button (top right)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: () {
+                    final favorite = Favorite.fromSeries(
+                      seriesId: series.seriesId ?? 0,
+                      title: series.name ?? '',
+                      imageUrl: series.cover,
+                    );
+                    xtreamService.toggleFavorite(favorite);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SvgPicture.asset(
+                      isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                      width: 14,
+                      height: 14,
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Tags (top left)
               if (metadata.isPopular || metadata.quality != null)
                 Positioned(
                   top: 6,

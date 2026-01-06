@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
 import '../models/watch_progress.dart';
+import '../models/favorite.dart';
 import '../utils/content_parser.dart';
 import '../widgets/sticky_glass_header.dart';
 import 'player_screen.dart';
@@ -45,6 +46,7 @@ class _StartScreenState extends State<StartScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
     final continueWatching = xtreamService.continueWatching;
+    final favorites = xtreamService.favorites;
     final content = xtreamService.startScreenContent;
     final isLoading = xtreamService.isStartScreenLoading;
     final preferredLanguage = xtreamService.preferredLanguage;
@@ -91,6 +93,11 @@ class _StartScreenState extends State<StartScreen> {
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
               ],
+
+            // Favorites Section (after Continue Watching) - always rendered for smooth animation
+            SliverToBoxAdapter(
+              child: _AnimatedFavoritesSection(favorites: favorites),
+            ),
 
               // Loading indicator (full screen when no content yet)
               if (isLoading && content == null)
@@ -255,7 +262,8 @@ class _StartScreenState extends State<StartScreen> {
               if (!isLoading &&
                   content != null &&
                   content.isEmpty &&
-                  continueWatching.isEmpty)
+                  continueWatching.isEmpty &&
+                  favorites.isEmpty)
                 SliverToBoxAdapter(
                   child: _buildEmptyState(colorScheme),
                 ),
@@ -794,6 +802,380 @@ class _ContinueWatchingCard extends StatelessWidget {
             colorScheme.onSurface.withAlpha(50),
             BlendMode.srcIn,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedFavoritesSection extends StatelessWidget {
+  final List<Favorite> favorites;
+
+  const _AnimatedFavoritesSection({required this.favorites});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      alignment: Alignment.topCenter,
+      child: favorites.isEmpty
+          ? const SizedBox.shrink()
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: _SectionHeader(
+                    title: 'Favoriten',
+                    icon: 'assets/icons/heart-fill.svg',
+                  ),
+                ),
+                SizedBox(
+                  height: 80,
+                  child: _AnimatedFavoritesList(favorites: favorites),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+    );
+  }
+}
+
+class _AnimatedFavoritesList extends StatefulWidget {
+  final List<Favorite> favorites;
+
+  const _AnimatedFavoritesList({required this.favorites});
+
+  @override
+  State<_AnimatedFavoritesList> createState() => _AnimatedFavoritesListState();
+}
+
+class _AnimatedFavoritesListState extends State<_AnimatedFavoritesList> {
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  late List<Favorite> _internalList;
+
+  @override
+  void initState() {
+    super.initState();
+    _internalList = List.from(widget.favorites);
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedFavoritesList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Find removed items
+    final removedItems = _internalList.where(
+      (item) => !widget.favorites.any((f) => f.id == item.id)
+    ).toList();
+
+    // Find added items
+    final addedItems = widget.favorites.where(
+      (item) => !_internalList.any((f) => f.id == item.id)
+    ).toList();
+
+    // Animate removals
+    for (final removed in removedItems) {
+      final index = _internalList.indexOf(removed);
+      if (index != -1) {
+        _internalList.removeAt(index);
+        _listKey.currentState?.removeItem(
+          index,
+          (context, animation) => _buildAnimatedItem(removed, animation),
+          duration: const Duration(milliseconds: 300),
+        );
+      }
+    }
+
+    // Handle additions
+    for (final added in addedItems) {
+      // Find correct position (favorites are sorted by addedAt descending)
+      int insertIndex = 0;
+      for (int i = 0; i < _internalList.length; i++) {
+        if (added.addedAt.isAfter(_internalList[i].addedAt)) {
+          insertIndex = i;
+          break;
+        }
+        insertIndex = i + 1;
+      }
+      _internalList.insert(insertIndex, added);
+      _listKey.currentState?.insertItem(
+        insertIndex,
+        duration: const Duration(milliseconds: 300),
+      );
+    }
+  }
+
+  Widget _buildAnimatedItem(Favorite favorite, Animation<double> animation) {
+    return SizeTransition(
+      sizeFactor: animation,
+      axis: Axis.horizontal,
+      child: FadeTransition(
+        opacity: animation,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: _FavoriteCard(
+            favorite: favorite,
+            onRemove: () {}, // Disabled during animation
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final xtreamService = context.read<XtreamService>();
+
+    return AnimatedList(
+      key: _listKey,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      initialItemCount: _internalList.length,
+      itemBuilder: (context, index, animation) {
+        final favorite = _internalList[index];
+        return SizeTransition(
+          sizeFactor: animation,
+          axis: Axis.horizontal,
+          child: FadeTransition(
+            opacity: animation,
+            child: Padding(
+              padding: EdgeInsets.only(
+                right: index < _internalList.length - 1 ? 12 : 0,
+              ),
+              child: _FavoriteCard(
+                favorite: favorite,
+                onRemove: () => xtreamService.removeFavorite(favorite.id),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FavoriteCard extends StatelessWidget {
+  final Favorite favorite;
+  final VoidCallback onRemove;
+
+  const _FavoriteCard({required this.favorite, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.read<XtreamService>();
+
+    return GestureDetector(
+      onTap: () => _navigateToContent(context, xtreamService),
+      child: Container(
+        width: 220,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: colorScheme.outline.withAlpha(25),
+          ),
+        ),
+        child: Row(
+          children: [
+            // Small image/icon on the left
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurface.withAlpha(15),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(13),
+                  bottomLeft: Radius.circular(13),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(13),
+                  bottomLeft: Radius.circular(13),
+                ),
+                child: favorite.imageUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: favorite.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                      )
+                    : _buildPlaceholder(colorScheme),
+              ),
+            ),
+            // Content on the right
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top row: Badge + Heart
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _getTypeColor(),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _getTypeLabel(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: onRemove,
+                          child: SvgPicture.asset(
+                            'assets/icons/heart-fill.svg',
+                            width: 18,
+                            height: 18,
+                            colorFilter: ColorFilter.mode(
+                              colorScheme.onSurface.withAlpha(150),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Title
+                    Expanded(
+                      child: Text(
+                        ContentParser.parse(favorite.title).cleanName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getTypeColor() {
+    switch (favorite.contentType) {
+      case ContentType.movie:
+        return Colors.blue.shade700;
+      case ContentType.series:
+        return Colors.purple.shade700;
+      case ContentType.live:
+        return Colors.red.shade700;
+    }
+  }
+
+  String _getTypeLabel() {
+    switch (favorite.contentType) {
+      case ContentType.movie:
+        return 'Film';
+      case ContentType.series:
+        return 'Serie';
+      case ContentType.live:
+        return 'Live';
+    }
+  }
+
+  void _navigateToContent(BuildContext context, XtreamService xtreamService) {
+    switch (favorite.contentType) {
+      case ContentType.movie:
+        final streamUrl = xtreamService.getMovieUrl(
+          favorite.streamId ?? 0,
+          container: favorite.extension ?? 'mp4',
+        );
+        if (streamUrl != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PlayerScreen(
+                title: ContentParser.parse(favorite.title).cleanName,
+                streamUrl: streamUrl,
+                contentId: favorite.id,
+                imageUrl: favorite.imageUrl,
+                contentType: ContentType.movie,
+              ),
+            ),
+          );
+        }
+        break;
+      case ContentType.series:
+        // Navigate to series detail using SeriesDetailScreenFromFavorite
+        if (favorite.seriesId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SeriesDetailScreenFromFavorite(
+                seriesId: favorite.seriesId!,
+                seriesName: favorite.title,
+                seriesCover: favorite.imageUrl,
+              ),
+            ),
+          );
+        }
+        break;
+      case ContentType.live:
+        // Use direct URL generation for live streams
+        final streamUrl = xtreamService.client?.streamUrl(
+          favorite.streamId ?? 0,
+          ['ts', 'm3u8'],
+        );
+        if (streamUrl != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PlayerScreen(
+                title: ContentParser.parse(favorite.title).cleanName,
+                streamUrl: streamUrl,
+                contentId: favorite.id,
+                imageUrl: favorite.imageUrl,
+                contentType: ContentType.live,
+              ),
+            ),
+          );
+        }
+        break;
+    }
+  }
+
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    String iconPath;
+    switch (favorite.contentType) {
+      case ContentType.movie:
+        iconPath = 'assets/icons/film-strip.svg';
+        break;
+      case ContentType.series:
+        iconPath = 'assets/icons/monitor-play.svg';
+        break;
+      case ContentType.live:
+        iconPath = 'assets/icons/television.svg';
+        break;
+    }
+
+    return Center(
+      child: SvgPicture.asset(
+        iconPath,
+        width: 32,
+        height: 32,
+        colorFilter: ColorFilter.mode(
+          colorScheme.onSurface.withAlpha(30),
+          BlendMode.srcIn,
         ),
       ),
     );

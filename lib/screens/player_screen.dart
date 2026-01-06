@@ -126,7 +126,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _checkExistingProgress() {
-    if (widget.contentId == null) return;
+    // Kein Weiterschauen bei Live-TV
+    if (widget.contentId == null || widget.contentType == ContentType.live) return;
     _existingProgress = _xtreamService.getWatchProgress(widget.contentId!);
   }
 
@@ -220,7 +221,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _saveCurrentProgress() async {
-    if (widget.contentId == null) return;
+    // Kein Progress-Speichern bei Live-TV
+    if (widget.contentId == null || widget.contentType == ContentType.live) return;
 
     final position = _player.state.position;
     final duration = _player.state.duration;
@@ -244,7 +246,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _saveFinalProgress() {
-    if (widget.contentId == null) return;
+    // Kein Progress-Speichern bei Live-TV
+    if (widget.contentId == null || widget.contentType == ContentType.live) return;
 
     final position = _player.state.position;
     final duration = _player.state.duration;
@@ -896,11 +899,11 @@ class _PlayerScreenState extends State<PlayerScreen>
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isFavorite ? Colors.red.withAlpha(200) : Colors.white.withAlpha(30),
+                  color: Colors.white.withAlpha(30),
                   shape: BoxShape.circle,
                 ),
                 child: SvgPicture.asset(
-                  'assets/icons/heart.svg',
+                  isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
                   width: 20,
                   height: 20,
                   colorFilter: const ColorFilter.mode(

@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
-import '../widgets/content_card.dart';
+import '../models/favorite.dart';
+import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
@@ -89,6 +91,9 @@ class _SearchScreenState extends State<SearchScreen> {
             title: metadata.cleanName,
             subtitle: movie.year,
             streamUrl: url,
+            contentId: 'movie_${movie.streamId}',
+            imageUrl: movie.streamIcon,
+            contentType: ContentType.movie,
           ),
         ),
       );
@@ -117,6 +122,9 @@ class _SearchScreenState extends State<SearchScreen> {
             title: metadata.cleanName,
             subtitle: null,
             streamUrl: url,
+            contentId: 'live_${stream.streamId}',
+            imageUrl: stream.streamIcon,
+            contentType: ContentType.live,
           ),
         ),
       );
@@ -418,15 +426,9 @@ class _SearchScreenState extends State<SearchScreen> {
           final movie = _results.movies[index];
           return Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: SizedBox(
-              width: 140,
-              child: ContentCard(
-                title: movie.name ?? 'Unbekannt',
-                subtitle: movie.year,
-                imageUrl: movie.streamIcon,
-                icon: 'assets/icons/film-strip.svg',
-                onTap: () => _playMovie(movie),
-              ),
+            child: _SearchMovieCard(
+              movie: movie,
+              onTap: () => _playMovie(movie),
             ),
           );
         },
@@ -445,15 +447,9 @@ class _SearchScreenState extends State<SearchScreen> {
           final series = _results.series[index];
           return Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: SizedBox(
-              width: 140,
-              child: ContentCard(
-                title: series.name ?? 'Unbekannt',
-                subtitle: series.year,
-                imageUrl: series.cover,
-                icon: 'assets/icons/monitor-play.svg',
-                onTap: () => _openSeries(series),
-              ),
+            child: _SearchSeriesCard(
+              series: series,
+              onTap: () => _openSeries(series),
             ),
           );
         },
@@ -472,19 +468,413 @@ class _SearchScreenState extends State<SearchScreen> {
           final stream = _results.liveStreams[index];
           return Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: SizedBox(
-              width: 180,
-              child: ContentCard(
-                title: stream.name ?? 'Unbekannt',
-                subtitle: null,
-                imageUrl: stream.streamIcon,
-                icon: 'assets/icons/television.svg',
-                isLive: true,
-                onTap: () => _playLiveStream(stream),
-              ),
+            child: _SearchLiveCard(
+              stream: stream,
+              onTap: () => _playLiveStream(stream),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// Search Movie Card with Favorite Button
+class _SearchMovieCard extends StatelessWidget {
+  final XTremeCodeVodItem movie;
+  final VoidCallback onTap;
+
+  const _SearchMovieCard({required this.movie, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.watch<XtreamService>();
+    final metadata = ContentParser.parse(movie.name ?? '');
+    final favoriteId = 'movie_${movie.streamId}';
+    final isFavorite = xtreamService.isFavorite(favoriteId);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 140,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outline.withAlpha(25)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: movie.streamIcon != null
+                    ? CachedNetworkImage(
+                        imageUrl: movie.streamIcon!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                      )
+                    : _buildPlaceholder(colorScheme),
+              ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withAlpha(200),
+                      ],
+                      stops: const [0.4, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Favorite button
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: () {
+                    xtreamService.toggleFavorite(Favorite.fromMovie(
+                      streamId: movie.streamId ?? 0,
+                      title: movie.name ?? '',
+                      imageUrl: movie.streamIcon,
+                      extension: movie.containerExtension,
+                    ));
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SvgPicture.asset(
+                      isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                      width: 14,
+                      height: 14,
+                      colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
+              ),
+              // Quality badge
+              if (metadata.quality != null)
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      metadata.quality!,
+                      style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                  ),
+                ),
+              // Title
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      metadata.cleanName,
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (movie.year != null)
+                      Text(
+                        movie.year!,
+                        style: GoogleFonts.poppins(fontSize: 10, color: Colors.white70),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    return Container(
+      color: colorScheme.onSurface.withAlpha(10),
+      child: Center(
+        child: SvgPicture.asset(
+          'assets/icons/film-strip.svg',
+          width: 32,
+          height: 32,
+          colorFilter: ColorFilter.mode(colorScheme.onSurface.withAlpha(30), BlendMode.srcIn),
+        ),
+      ),
+    );
+  }
+}
+
+// Search Series Card with Favorite Button
+class _SearchSeriesCard extends StatelessWidget {
+  final XTremeCodeSeriesItem series;
+  final VoidCallback onTap;
+
+  const _SearchSeriesCard({required this.series, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.watch<XtreamService>();
+    final metadata = ContentParser.parse(series.name ?? '');
+    final favoriteId = 'series_${series.seriesId}';
+    final isFavorite = xtreamService.isFavorite(favoriteId);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 140,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outline.withAlpha(25)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: series.cover != null
+                    ? CachedNetworkImage(
+                        imageUrl: series.cover!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                      )
+                    : _buildPlaceholder(colorScheme),
+              ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withAlpha(200),
+                      ],
+                      stops: const [0.4, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // Favorite button
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: () {
+                    xtreamService.toggleFavorite(Favorite.fromSeries(
+                      seriesId: series.seriesId ?? 0,
+                      title: series.name ?? '',
+                      imageUrl: series.cover,
+                    ));
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SvgPicture.asset(
+                      isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                      width: 14,
+                      height: 14,
+                      colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
+              ),
+              // Title
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      metadata.cleanName,
+                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (series.year != null)
+                      Text(
+                        series.year!,
+                        style: GoogleFonts.poppins(fontSize: 10, color: Colors.white70),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    return Container(
+      color: colorScheme.onSurface.withAlpha(10),
+      child: Center(
+        child: SvgPicture.asset(
+          'assets/icons/monitor-play.svg',
+          width: 32,
+          height: 32,
+          colorFilter: ColorFilter.mode(colorScheme.onSurface.withAlpha(30), BlendMode.srcIn),
+        ),
+      ),
+    );
+  }
+}
+
+// Search Live Card with Favorite Button
+class _SearchLiveCard extends StatelessWidget {
+  final XTremeCodeLiveStreamItem stream;
+  final VoidCallback onTap;
+
+  const _SearchLiveCard({required this.stream, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final xtreamService = context.watch<XtreamService>();
+    final metadata = ContentParser.parse(stream.name ?? '');
+    final favoriteId = 'live_${stream.streamId}';
+    final isFavorite = xtreamService.isFavorite(favoriteId);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 180,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outline.withAlpha(25)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: stream.streamIcon != null
+                    ? CachedNetworkImage(
+                        imageUrl: stream.streamIcon!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                      )
+                    : _buildPlaceholder(colorScheme),
+              ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withAlpha(200),
+                      ],
+                      stops: const [0.3, 1.0],
+                    ),
+                  ),
+                ),
+              ),
+              // LIVE badge
+              Positioned(
+                top: 6,
+                left: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'LIVE',
+                        style: GoogleFonts.poppins(fontSize: 8, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Favorite button
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: () {
+                    xtreamService.toggleFavorite(Favorite.fromLiveStream(
+                      streamId: stream.streamId ?? 0,
+                      title: stream.name ?? '',
+                      imageUrl: stream.streamIcon,
+                    ));
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SvgPicture.asset(
+                      isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                      width: 14,
+                      height: 14,
+                      colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
+              ),
+              // Title
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Text(
+                  metadata.cleanName,
+                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    return Container(
+      color: colorScheme.onSurface.withAlpha(10),
+      child: Center(
+        child: SvgPicture.asset(
+          'assets/icons/television.svg',
+          width: 28,
+          height: 28,
+          colorFilter: ColorFilter.mode(colorScheme.onSurface.withAlpha(30), BlendMode.srcIn),
+        ),
       ),
     );
   }
