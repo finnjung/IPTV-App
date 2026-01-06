@@ -137,6 +137,23 @@ class _PlayerScreenState extends State<PlayerScreen>
 
       _player.stream.error.listen((error) {
         debugPrint('Player error: $error');
+
+        // Nicht-fatale Fehler ignorieren (besonders bei Live-Streams)
+        final ignorableErrors = [
+          'Cannot seek',
+          'force-seekable',
+          'seekable',
+        ];
+
+        final isIgnorable = ignorableErrors.any(
+          (e) => error.toLowerCase().contains(e.toLowerCase()),
+        );
+
+        if (isIgnorable) {
+          debugPrint('Ignoring non-fatal error: $error');
+          return;
+        }
+
         if (mounted) {
           setState(() {
             _error = error;
@@ -1029,6 +1046,51 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _buildBottomControls(ColorScheme colorScheme) {
+    final isLive = widget.contentType == ContentType.live;
+
+    // Bei Live-Streams: LIVE-Badge unten links
+    if (isLive) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 16, 24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'LIVE',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Bei VOD: Seekbar und Zeiten anzeigen
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
