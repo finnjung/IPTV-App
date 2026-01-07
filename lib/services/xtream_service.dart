@@ -368,11 +368,20 @@ class XtreamService extends ChangeNotifier {
   String? getLiveStreamUrl(XTremeCodeLiveStreamItem stream) {
     if (client == null) return null;
     try {
-      return client!.streamUrl(stream.streamId ?? 0, ['ts', 'm3u8']);
+      return _cleanUrl(client!.streamUrl(stream.streamId ?? 0, ['ts', 'm3u8']));
     } catch (e) {
       debugPrint('Error getting stream URL: $e');
       return null;
     }
+  }
+
+  /// Bereinigt URLs von trailing Punkten und Leerzeichen
+  String _cleanUrl(String url) {
+    String clean = url;
+    while (clean.endsWith('.') || clean.endsWith(' ')) {
+      clean = clean.substring(0, clean.length - 1);
+    }
+    return clean;
   }
 
   String? getMovieUrl(int streamId, {String container = 'mp4'}) {
@@ -382,7 +391,7 @@ class XtreamService extends ChangeNotifier {
       String cleanContainer = container.replaceAll('.', '').replaceAll(' ', '').trim();
       if (cleanContainer.isEmpty) cleanContainer = 'mp4';
 
-      final url = client!.movieUrl(streamId, cleanContainer);
+      final url = _cleanUrl(client!.movieUrl(streamId, cleanContainer));
       debugPrint('Movie URL: $url (container: "$container" -> "$cleanContainer")');
       return url;
     } catch (e) {
@@ -398,7 +407,7 @@ class XtreamService extends ChangeNotifier {
       String cleanContainer = container.replaceAll('.', '').replaceAll(' ', '').trim();
       if (cleanContainer.isEmpty) cleanContainer = 'mp4';
 
-      final url = client!.seriesUrl(episodeId, cleanContainer);
+      final url = _cleanUrl(client!.seriesUrl(episodeId, cleanContainer));
       debugPrint('Episode URL: $url (container: "$container" -> "$cleanContainer")');
       return url;
     } catch (e) {
