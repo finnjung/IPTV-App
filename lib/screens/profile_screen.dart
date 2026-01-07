@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -916,11 +918,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    // Extra Padding für macOS wegen Traffic Lights
+    final extraTopPadding = !kIsWeb && Platform.isMacOS ? 28.0 : 0.0;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.fromLTRB(20, 20 + extraTopPadding, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

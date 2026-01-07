@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +11,7 @@ import '../models/watch_progress.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
 import '../widgets/sticky_glass_header.dart';
+import '../widgets/hero_banner.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 
@@ -41,6 +44,15 @@ class _StartScreenState extends State<StartScreen> {
     await xtreamService.loadStartScreenContent(forceRefresh: true);
   }
 
+  bool _isDesktopPlatform() {
+    if (kIsWeb) return true;
+    return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+  }
+
+  bool _useDesktopLayout(BuildContext context) {
+    return _isDesktopPlatform() && MediaQuery.of(context).size.width >= 768;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -48,8 +60,10 @@ class _StartScreenState extends State<StartScreen> {
     final continueWatching = xtreamService.continueWatching;
     final favorites = xtreamService.favorites;
     final content = xtreamService.startScreenContent;
-    final isLoading = xtreamService.isStartScreenLoading;
+    // Auch Preloading berücksichtigen
+    final isLoading = xtreamService.isStartScreenLoading || xtreamService.isPreloading;
     final preferredLanguage = xtreamService.preferredLanguage;
+    final isDesktop = _useDesktopLayout(context);
 
     return Scaffold(
       body: RefreshIndicator(
@@ -58,8 +72,17 @@ class _StartScreenState extends State<StartScreen> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Sticky Glass Header
-            const StickyStartHeader(),
+            // Hero Banner (wenn Spotlight verfügbar)
+            if (content?.spotlight != null)
+              SliverToBoxAdapter(
+                child: _buildHeroBanner(content!.spotlight!, xtreamService),
+              )
+            else if (!isDesktop)
+              // Sticky Glass Header als Fallback (nur Mobile - Desktop hat das Overlay)
+              const StickyStartHeader()
+            else
+              // Desktop ohne Spotlight: Nur Padding für das Overlay
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
 
             // Continue Watching Section (always show if available)
               if (continueWatching.isNotEmpty) ...[
@@ -123,140 +146,9 @@ class _StartScreenState extends State<StartScreen> {
                   ),
                 ),
 
-              // Content sections (when loaded)
-              if (content != null) ...[
-                // Popular Movies Section
-                if (content.popularMovies.isNotEmpty) ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                      child: _SectionHeader(
-                        title: 'Beliebte Filme',
-                        icon: 'assets/icons/flame.svg',
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: content.popularMovies.length,
-                        itemBuilder: (context, index) {
-                          final movie = content.popularMovies[index];
-                          return Padding(
-                            padding: EdgeInsets.only(
-                              right: index < content.popularMovies.length - 1 ? 12 : 0,
-                            ),
-                            child: _MovieCard(movie: movie),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Popular Series Section
-                if (content.popularSeries.isNotEmpty) ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-                      child: _SectionHeader(
-                        title: 'Beliebte Serien',
-                        icon: 'assets/icons/flame.svg',
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: content.popularSeries.length,
-                        itemBuilder: (context, index) {
-                          final series = content.popularSeries[index];
-                          return Padding(
-                            padding: EdgeInsets.only(
-                              right: index < content.popularSeries.length - 1 ? 12 : 0,
-                            ),
-                            child: _SeriesCard(series: series),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Recommended Movies Section (by Language)
-                if (content.recommendedMovies.isNotEmpty) ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-                      child: _SectionHeader(
-                        title: preferredLanguage != null
-                            ? 'Filme auf ${ContentParser.languageCodes[preferredLanguage] ?? preferredLanguage}'
-                            : 'Filme für dich',
-                        icon: 'assets/icons/film-strip.svg',
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: content.recommendedMovies.length,
-                        itemBuilder: (context, index) {
-                          final movie = content.recommendedMovies[index];
-                          return Padding(
-                            padding: EdgeInsets.only(
-                              right: index < content.recommendedMovies.length - 1 ? 12 : 0,
-                            ),
-                            child: _MovieCard(movie: movie),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Recommended Series Section (by Language)
-                if (content.recommendedSeries.isNotEmpty) ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-                      child: _SectionHeader(
-                        title: preferredLanguage != null
-                            ? 'Serien auf ${ContentParser.languageCodes[preferredLanguage] ?? preferredLanguage}'
-                            : 'Serien für dich',
-                        icon: 'assets/icons/monitor-play.svg',
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: content.recommendedSeries.length,
-                        itemBuilder: (context, index) {
-                          final series = content.recommendedSeries[index];
-                          return Padding(
-                            padding: EdgeInsets.only(
-                              right: index < content.recommendedSeries.length - 1 ? 12 : 0,
-                            ),
-                            child: _SeriesCard(series: series),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+              // Dynamic Content Sections (in täglicher Reihenfolge)
+              if (content != null)
+                ..._buildDynamicSections(content, preferredLanguage),
 
               // Empty state if nothing to show and not loading
               if (!isLoading &&
@@ -320,6 +212,380 @@ class _StartScreenState extends State<StartScreen> {
         ],
       ),
     );
+  }
+
+  /// Baut das Hero-Banner
+  Widget _buildHeroBanner(SpotlightContent spotlight, XtreamService xtreamService) {
+    return HeroBanner(
+      title: spotlight.name,
+      imageUrl: spotlight.imageUrl,
+      quality: spotlight.quality,
+      language: spotlight.language,
+      category: spotlight.curatedTitle.category,
+      onPlay: () {
+        if (spotlight.isMovie) {
+          final movie = spotlight.originalItem as XTremeCodeVodItem;
+          final streamUrl = xtreamService.getMovieUrl(movie.streamId ?? 0);
+          if (streamUrl != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PlayerScreen(
+                  title: spotlight.name,
+                  streamUrl: streamUrl,
+                  contentId: 'movie_${movie.streamId}',
+                  imageUrl: movie.streamIcon,
+                  contentType: ContentType.movie,
+                ),
+              ),
+            );
+          }
+        } else {
+          final series = spotlight.originalItem as XTremeCodeSeriesItem;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SeriesDetailScreen(series: series),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  /// Baut dynamische Content-Sections basierend auf täglicher Reihenfolge
+  List<Widget> _buildDynamicSections(StartScreenContent content, String? preferredLanguage) {
+    final sections = <Widget>[];
+
+    for (final section in content.sectionOrder) {
+      switch (section) {
+        case StartScreenSection.continueWatching:
+        case StartScreenSection.favorites:
+          // Diese werden separat oben gehandhabt
+          break;
+
+        case StartScreenSection.curatedPopular:
+          // Kuratierte beliebte Inhalte (Filme + Serien gemischt)
+          if (content.curatedMovies.isNotEmpty || content.curatedSeries.isNotEmpty) {
+            sections.addAll(_buildCuratedPopularSection(content));
+          } else if (content.popularMovies.isNotEmpty || content.popularSeries.isNotEmpty) {
+            // Fallback auf Provider-Tags
+            sections.addAll(_buildFallbackPopularSection(content));
+          }
+          break;
+
+        case StartScreenSection.curatedKids:
+          if (content.curatedKids.isNotEmpty) {
+            sections.addAll(_buildCuratedKidsSection(content));
+          }
+          break;
+
+        case StartScreenSection.thrillerSeries:
+          if (content.thrillerSeries.isNotEmpty) {
+            sections.addAll(_buildThrillerSeriesSection(content));
+          }
+          break;
+
+        case StartScreenSection.actionMovies:
+          if (content.actionMovies.isNotEmpty) {
+            sections.addAll(_buildActionMoviesSection(content));
+          }
+          break;
+
+        case StartScreenSection.allMovies:
+          if (content.allMovies.isNotEmpty) {
+            sections.addAll(_buildAllMoviesSection(content));
+          }
+          break;
+
+        case StartScreenSection.allSeries:
+          if (content.allSeries.isNotEmpty) {
+            sections.addAll(_buildAllSeriesSection(content));
+          }
+          break;
+      }
+    }
+
+    return sections;
+  }
+
+  List<Widget> _buildCuratedPopularSection(StartScreenContent content) {
+    // Mische Filme und Serien, bevorzuge nach Match-Score
+    final allCurated = <dynamic>[...content.curatedMovies, ...content.curatedSeries];
+
+    // Sortiere nach Match-Score
+    allCurated.sort((a, b) {
+      final nameA = a is XTremeCodeVodItem ? a.name : (a as XTremeCodeSeriesItem).name;
+      final nameB = b is XTremeCodeVodItem ? b.name : (b as XTremeCodeSeriesItem).name;
+      final metaA = ContentParser.parse(nameA ?? '');
+      final metaB = ContentParser.parse(nameB ?? '');
+      return metaB.curatedMatchScore.compareTo(metaA.curatedMatchScore);
+    });
+
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          child: _SectionHeader(
+            title: 'Das gefällt dir bestimmt',
+            icon: 'assets/icons/star.svg',
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: allCurated.take(20).length,
+            itemBuilder: (context, index) {
+              final item = allCurated[index];
+              return Padding(
+                padding: EdgeInsets.only(right: index < 19 ? 12 : 0),
+                child: item is XTremeCodeVodItem
+                    ? _MovieCard(movie: item)
+                    : _SeriesCard(series: item as XTremeCodeSeriesItem),
+              );
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildFallbackPopularSection(StartScreenContent content) {
+    return [
+      if (content.popularMovies.isNotEmpty) ...[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: _SectionHeader(
+              title: 'Beliebte Filme',
+              icon: 'assets/icons/flame.svg',
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: content.popularMovies.length,
+              itemBuilder: (context, index) {
+                final movie = content.popularMovies[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index < content.popularMovies.length - 1 ? 12 : 0,
+                  ),
+                  child: _MovieCard(movie: movie),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+      if (content.popularSeries.isNotEmpty) ...[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+            child: _SectionHeader(
+              title: 'Beliebte Serien',
+              icon: 'assets/icons/flame.svg',
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: content.popularSeries.length,
+              itemBuilder: (context, index) {
+                final series = content.popularSeries[index];
+                return Padding(
+                  padding: EdgeInsets.only(
+                    right: index < content.popularSeries.length - 1 ? 12 : 0,
+                  ),
+                  child: _SeriesCard(series: series),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _buildCuratedKidsSection(StartScreenContent content) {
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+          child: _SectionHeader(
+            title: 'Für die Kleinen',
+            icon: 'assets/icons/heart.svg',
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: content.curatedKids.length,
+            itemBuilder: (context, index) {
+              final item = content.curatedKids[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < content.curatedKids.length - 1 ? 12 : 0,
+                ),
+                child: item is XTremeCodeVodItem
+                    ? _MovieCard(movie: item)
+                    : _SeriesCard(series: item as XTremeCodeSeriesItem),
+              );
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildThrillerSeriesSection(StartScreenContent content) {
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+          child: _SectionHeader(
+            title: 'Spannende Serien',
+            icon: 'assets/icons/monitor-play.svg',
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: content.thrillerSeries.length,
+            itemBuilder: (context, index) {
+              final series = content.thrillerSeries[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < content.thrillerSeries.length - 1 ? 12 : 0,
+                ),
+                child: _SeriesCard(series: series),
+              );
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildActionMoviesSection(StartScreenContent content) {
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+          child: _SectionHeader(
+            title: 'Action Filme',
+            icon: 'assets/icons/film-strip.svg',
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: content.actionMovies.length,
+            itemBuilder: (context, index) {
+              final movie = content.actionMovies[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < content.actionMovies.length - 1 ? 12 : 0,
+                ),
+                child: _MovieCard(movie: movie),
+              );
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildAllMoviesSection(StartScreenContent content) {
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 40, 20, 16),
+          child: _SectionHeader(
+            title: 'Alle Filme',
+            icon: 'assets/icons/film-strip.svg',
+            subtitle: '${content.allMovies.length} Titel',
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: content.allMovies.length,
+            itemBuilder: (context, index) {
+              final movie = content.allMovies[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < content.allMovies.length - 1 ? 12 : 0,
+                ),
+                child: _MovieCard(movie: movie),
+              );
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildAllSeriesSection(StartScreenContent content) {
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+          child: _SectionHeader(
+            title: 'Alle Serien',
+            icon: 'assets/icons/monitor-play.svg',
+            subtitle: '${content.allSeries.length} Titel',
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: content.allSeries.length,
+            itemBuilder: (context, index) {
+              final series = content.allSeries[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index < content.allSeries.length - 1 ? 12 : 0,
+                ),
+                child: _SeriesCard(series: series),
+              );
+            },
+          ),
+        ),
+      ),
+    ];
   }
 }
 
@@ -1185,10 +1451,12 @@ class _FavoriteCard extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String icon;
+  final String? subtitle;
 
   const _SectionHeader({
     required this.title,
     required this.icon,
+    this.subtitle,
   });
 
   @override
@@ -1208,15 +1476,30 @@ class _SectionHeader extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Row(
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  subtitle!,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: colorScheme.onSurface.withAlpha(100),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ],

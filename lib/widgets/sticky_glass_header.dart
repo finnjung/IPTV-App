@@ -1,7 +1,18 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../screens/search_screen.dart';
+
+bool _isDesktopPlatform() {
+  if (kIsWeb) return true;
+  return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+}
+
+bool _useDesktopLayout(BuildContext context) {
+  return _isDesktopPlatform() && MediaQuery.of(context).size.width >= 768;
+}
 
 class StickyGlassHeader extends StatelessWidget {
   final String title;
@@ -39,11 +50,14 @@ class _StickyGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.iconPath,
   });
 
-  @override
-  double get minExtent => 130;
+  // Extra Höhe für macOS wegen Traffic Lights
+  double get _extraTopPadding => !kIsWeb && Platform.isMacOS ? 28.0 : 0.0;
 
   @override
-  double get maxExtent => 130;
+  double get minExtent => 130 + _extraTopPadding;
+
+  @override
+  double get maxExtent => 130 + _extraTopPadding;
 
   @override
   Widget build(
@@ -74,7 +88,7 @@ class _StickyGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          padding: EdgeInsets.fromLTRB(20, 12 + _extraTopPadding, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -113,25 +127,27 @@ class _StickyGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SearchScreen(),
+                  // Such-Icon nur auf Mobile (Desktop hat's im Overlay)
+                  if (!_useDesktopLayout(context))
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SearchScreen(),
+                          ),
+                        );
+                      },
+                      child: SvgPicture.asset(
+                        'assets/icons/magnifying-glass.svg',
+                        width: 26,
+                        height: 26,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.onSurface.withAlpha(180),
+                          BlendMode.srcIn,
                         ),
-                      );
-                    },
-                    child: SvgPicture.asset(
-                      'assets/icons/magnifying-glass.svg',
-                      width: 26,
-                      height: 26,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(180),
-                        BlendMode.srcIn,
                       ),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -163,11 +179,14 @@ class StickyStartHeader extends StatelessWidget {
 }
 
 class _StickyStartHeaderDelegate extends SliverPersistentHeaderDelegate {
-  @override
-  double get minExtent => 130;
+  // Extra Höhe für macOS wegen Traffic Lights
+  double get _extraTopPadding => !kIsWeb && Platform.isMacOS ? 28.0 : 0.0;
 
   @override
-  double get maxExtent => 130;
+  double get minExtent => 130 + _extraTopPadding;
+
+  @override
+  double get maxExtent => 130 + _extraTopPadding;
 
   @override
   Widget build(
@@ -198,7 +217,7 @@ class _StickyStartHeaderDelegate extends SliverPersistentHeaderDelegate {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          padding: EdgeInsets.fromLTRB(20, 12 + _extraTopPadding, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -236,25 +255,27 @@ class _StickyStartHeaderDelegate extends SliverPersistentHeaderDelegate {
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SearchScreen(),
+                  // Such-Icon nur auf Mobile (Desktop hat's im Overlay)
+                  if (!_useDesktopLayout(context))
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SearchScreen(),
+                          ),
+                        );
+                      },
+                      child: SvgPicture.asset(
+                        'assets/icons/magnifying-glass.svg',
+                        width: 26,
+                        height: 26,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.onSurface.withAlpha(180),
+                          BlendMode.srcIn,
                         ),
-                      );
-                    },
-                    child: SvgPicture.asset(
-                      'assets/icons/magnifying-glass.svg',
-                      width: 26,
-                      height: 26,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(180),
-                        BlendMode.srcIn,
                       ),
                     ),
-                  ),
                 ],
               ),
             ],

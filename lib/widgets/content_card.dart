@@ -151,8 +151,8 @@ class ContentCard extends StatelessWidget {
                   ),
                 ),
 
-              // Badges (Popular + Quality + Year + Language)
-              if ((metadata.isPopular || metadata.quality != null || metadata.year != null || metadata.language != null) && !isLive)
+              // Badges (Popular + Quality + 3D + Year + Language)
+              if ((metadata.isPopular || metadata.quality != null || metadata.is3D || metadata.year != null || metadata.language != null) && !isLive)
                 Positioned(
                   top: 8,
                   left: 8,
@@ -186,6 +186,24 @@ class ContentCard extends StatelessWidget {
                           ),
                           child: Text(
                             metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (metadata.is3D) ...[
+                        if (metadata.isPopular || metadata.quality != null) const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '3D',
                             style: GoogleFonts.poppins(
                               fontSize: 9,
                               fontWeight: FontWeight.w600,

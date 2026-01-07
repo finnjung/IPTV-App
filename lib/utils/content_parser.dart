@@ -1,3 +1,5 @@
+import '../data/curated_content.dart';
+
 /// Parser für Content-Namen um Metadaten zu extrahieren
 /// OPTIMIERT: Mit Memoization-Cache und vorkompilierten RegExp-Patterns
 class ContentParser {
@@ -99,22 +101,23 @@ class ContentParser {
   static const List<String> prefixTags = [
     'HOT', 'TOP', 'NEW', 'VIP', 'PREMIUM', 'BEST', 'POPULAR', 'TREND', 'GOLD',
     'NF', 'NETFLIX', 'NFLX',
-    'AMZN', 'AP', 'AMAZON', 'PRIME', 'AS',
+    'AMZN', 'AMZ', 'AP', 'AMAZON', 'PRIME', 'AS',
     'DSNP', 'DP', 'DISNEY', 'DNY',
     'HMAX', 'HBO', 'MAX',
-    'ATVP', 'ATV', 'APPLE',
+    'ATVP', 'ATV', 'APPLE', 'A+',
     'PMTP', 'PARAMOUNT', 'PARA',
     'HULU', 'TUBI', 'VIX', 'WOW', 'NOW',
     'PCOK', 'PEACOCK',
     'SHO', 'SHOWTIME',
     'STAN', 'STARZ',
-    'MUBI', 'CC', 'DCU',
+    'MUBI', 'CC', 'DCU', 'SC',
     'SLING', 'JOYN', 'MEO', 'DSTV', 'SKYGO', 'GOBX', 'OSN',
     'PLAY', 'PLAY+', 'PLAYER', 'GO', 'SAT', 'DVB-T',
     'M+', 'V+', 'ZINA',
     '24/7', 'SPORTS', 'SPO', 'NBA', 'F1', 'SNOOKER', 'SPFL',
     'DO', 'DOC', 'DOCU', 'DOCUMENTARY',
     'MV', 'MOVIE', 'FILM', 'MOV',
+    '3D-DE', '3D',
     'TV', 'SERIES', 'SHOW', 'SER',
     'AN', 'ANIME', 'ANI',
     'KI', 'KIDS', 'KID',
@@ -163,7 +166,7 @@ class ContentParser {
   static final Map<String, RegExp> _languagePatterns = {
     for (final key in languageCodes.keys)
       key: RegExp(
-        r'(?:^|\s|\||\[|\()' + key + r'(?:\s|\||:|\-|\–|\—|\]|\)|$)',
+        r'(?:^|\s|\||\.|\[|\(|\-|\–|\—|_)' + key + r'(?:\s|\||:|\-|\–|\—|\]|\)|\.|\,|_|$)',
         caseSensitive: false,
       )
   };
@@ -306,6 +309,7 @@ class ContentParser {
     String? quality;
     String? country;
     bool isPopular = false;
+    bool is3D = false;
     final tags = <String>[];
 
     // Ländercode aus Präfix extrahieren
@@ -323,6 +327,13 @@ class ContentParser {
         language = entry.key;
         break;
       }
+    }
+
+    // 3D erkennen
+    final upper = name.toUpperCase();
+    if (upper.contains('3D-DE') || upper.contains('3D DE') ||
+        _containsTag(upper, '3D')) {
+      is3D = true;
     }
 
     // Qualität erkennen
@@ -422,16 +433,23 @@ class ContentParser {
           .trim();
     }
 
+    // Kuratiertes Matching durchführen
+    final finalCleanName = cleanName.isEmpty ? name : cleanName;
+    final (curatedMatch, matchScore) = CuratedContent.findBestMatch(finalCleanName);
+
     return ContentMetadata(
       originalName: name,
-      cleanName: cleanName.isEmpty ? name : cleanName,
+      cleanName: finalCleanName,
       language: language,
       languageDisplayName: language != null ? languageCodes[language] : null,
       quality: quality,
       country: country,
       year: year,
       isPopular: isPopular,
+      is3D: is3D,
       tags: tags,
+      curatedMatch: curatedMatch,
+      curatedMatchScore: matchScore,
     );
   }
 
@@ -498,7 +516,14 @@ class ContentMetadata {
   final String? country;
   final int? year;
   final bool isPopular;
+  final bool is3D;
   final List<String> tags;
+
+  /// Kuratierter Titel-Match (falls gefunden)
+  final CuratedTitle? curatedMatch;
+
+  /// Match-Score für kuratierten Titel (0.0-1.0)
+  final double curatedMatchScore;
 
   ContentMetadata({
     required this.originalName,
@@ -509,11 +534,21 @@ class ContentMetadata {
     this.country,
     this.year,
     this.isPopular = false,
+    this.is3D = false,
     this.tags = const [],
+    this.curatedMatch,
+    this.curatedMatchScore = 0.0,
   });
+
+  /// Prüft ob dieser Inhalt ein kuratierter Titel ist
+  bool get isCurated => curatedMatch != null && curatedMatchScore >= 0.7;
+
+  /// Prüft ob dieser Inhalt für den Spotlight geeignet ist
+  bool get isSpotlightEligible =>
+      curatedMatch != null && curatedMatch!.spotlight && curatedMatchScore >= 0.8;
 
   @override
   String toString() {
-    return 'ContentMetadata(cleanName: $cleanName, language: $language, quality: $quality, country: $country, isPopular: $isPopular, tags: $tags)';
+    return 'ContentMetadata(cleanName: $cleanName, language: $language, quality: $quality, country: $country, isPopular: $isPopular, curated: ${curatedMatch?.name})';
   }
 }

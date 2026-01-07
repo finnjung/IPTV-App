@@ -67,7 +67,8 @@ class _MoviesScreenState extends State<MoviesScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
     final content = xtreamService.moviesScreenContent;
-    final isLoading = xtreamService.isLoadingMovies;
+    // Auch Preloading berücksichtigen
+    final isLoading = xtreamService.isLoadingMovies || xtreamService.isPreloading;
 
     return Scaffold(
       body: !xtreamService.isConnected

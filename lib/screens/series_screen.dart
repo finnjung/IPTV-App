@@ -50,7 +50,8 @@ class _SeriesScreenState extends State<SeriesScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
     final content = xtreamService.seriesScreenContent;
-    final isLoading = xtreamService.isLoadingSeries;
+    // Auch Preloading berücksichtigen
+    final isLoading = xtreamService.isLoadingSeries || xtreamService.isPreloading;
 
     return Scaffold(
       body: !xtreamService.isConnected

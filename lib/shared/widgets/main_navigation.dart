@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -65,8 +66,17 @@ class _MainNavigationState extends State<MainNavigation>
     super.dispose();
   }
 
-  bool _isDesktop(BuildContext context) {
+  bool _isDesktopPlatform() {
+    if (kIsWeb) return true;
+    return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+  }
+
+  bool _isWideScreen(BuildContext context) {
     return MediaQuery.of(context).size.width >= 768;
+  }
+
+  bool _useDesktopLayout(BuildContext context) {
+    return _isDesktopPlatform() && _isWideScreen(context);
   }
 
   void _onPageChanged(int index) {
@@ -121,145 +131,172 @@ class _MainNavigationState extends State<MainNavigation>
     );
   }
 
-  // Desktop/Web Navigation (oben)
-  Widget _buildDesktopAppBar() {
-    final colorScheme = Theme.of(context).colorScheme;
+  // Desktop/Web Navigation Overlay (transparent, über dem Content)
+  // Zeigt: "Willkommen zurück" links (nur Start-Tab) | Nav-Tabs + Suche + Profil rechts
+  Widget _buildDesktopNavOverlay() {
+    // Extra Padding für macOS wegen Titelleiste mit Traffic Lights
+    final extraTopPadding = !kIsWeb && Platform.isMacOS ? 28.0 : 0.0;
+    final isStartScreen = _selectedIndex == 0;
 
-    return SafeArea(
-      child: Container(
-        height: 70,
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(20),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border(
-            bottom: BorderSide(
-              color: colorScheme.outline.withAlpha(25),
-              width: 1,
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        bottom: false,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(32, 20 + extraTopPadding, 32, 20),
           child: Row(
             children: [
-              // Logo & App Name
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SvgPicture.asset(
-                    'assets/icons/television.svg',
-                    width: 32,
-                    height: 32,
-                    colorFilter: ColorFilter.mode(
-                      colorScheme.primary,
-                      BlendMode.srcIn,
+              // "Willkommen zurück" + Untertitel links (nur auf Start-Screen)
+              if (isStartScreen)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Willkommen',
+                          style: GoogleFonts.poppins(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 10,
+                                color: Colors.black.withAlpha(150),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'zurück',
+                          style: GoogleFonts.poppins(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withAlpha(180),
+                            shadows: [
+                              Shadow(
+                                blurRadius: 10,
+                                color: Colors.black.withAlpha(150),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'IPTV Player',
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface,
+                    const SizedBox(height: 2),
+                    Text(
+                      'Was möchtest du schauen?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.white.withAlpha(160),
+                        shadows: [
+                          Shadow(
+                            blurRadius: 8,
+                            color: Colors.black.withAlpha(120),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 48),
+                  ],
+                ),
 
-              // Navigation Tabs (ohne Profil)
+              const Spacer(),
+
+              // Navigation Tabs
               Row(
                 children: List.generate(4, (index) {
                   final isSelected = _selectedIndex == index;
                   return Padding(
-                    padding: const EdgeInsets.only(right: 32),
+                    padding: const EdgeInsets.only(left: 24),
                     child: GestureDetector(
                       onTap: () => _onItemTapped(index),
                       behavior: HitTestBehavior.opaque,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _tabLabels[index],
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: isSelected
-                                  ? colorScheme.onSurface
-                                  : colorScheme.onSurface.withAlpha(150),
-                              fontWeight:
-                                  isSelected ? FontWeight.w600 : FontWeight.w500,
-                            ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.white.withAlpha(20)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _tabLabels[index],
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.white.withAlpha(200),
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 8,
+                                color: Colors.black.withAlpha(120),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeOutCubic,
-                            height: 2,
-                            width: isSelected ? 36 : 0,
-                            decoration: BoxDecoration(
-                              color: colorScheme.onSurface,
-                              borderRadius: BorderRadius.circular(1),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   );
                 }),
               ),
 
-              const Spacer(),
+              const SizedBox(width: 20),
 
               // Such-Icon
               GestureDetector(
                 onTap: _openSearch,
                 behavior: HitTestBehavior.opaque,
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
+                    color: Colors.white.withAlpha(15),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withAlpha(30),
+                      width: 1,
+                    ),
                   ),
                   child: SvgPicture.asset(
                     'assets/icons/magnifying-glass.svg',
-                    width: 24,
-                    height: 24,
-                    colorFilter: ColorFilter.mode(
-                      colorScheme.onSurface.withAlpha(150),
+                    width: 20,
+                    height: 20,
+                    colorFilter: const ColorFilter.mode(
+                      Colors.white,
                       BlendMode.srcIn,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
 
-              // Profil Icon rechts
+              // Profil Icon
               GestureDetector(
                 onTap: () => _onItemTapped(4),
                 behavior: HitTestBehavior.opaque,
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: _selectedIndex == 4
-                        ? colorScheme.onSurface.withAlpha(15)
-                        : Colors.transparent,
+                        ? Colors.white.withAlpha(30)
+                        : Colors.white.withAlpha(15),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withAlpha(30),
+                      width: 1,
+                    ),
                   ),
                   child: SvgPicture.asset(
                     'assets/icons/user.svg',
-                    width: 24,
-                    height: 24,
-                    colorFilter: ColorFilter.mode(
-                      _selectedIndex == 4
-                          ? colorScheme.onSurface
-                          : colorScheme.onSurface.withAlpha(150),
+                    width: 20,
+                    height: 20,
+                    colorFilter: const ColorFilter.mode(
+                      Colors.white,
                       BlendMode.srcIn,
                     ),
                   ),
@@ -378,23 +415,22 @@ class _MainNavigationState extends State<MainNavigation>
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = kIsWeb && _isDesktop(context);
+    final isDesktop = _useDesktopLayout(context);
     return Scaffold(
-      appBar: isDesktop
-          ? AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              toolbarHeight: 70,
-              flexibleSpace: _buildDesktopAppBar(),
-            )
-          : null,
       extendBody: false,
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        physics: isDesktop ? const NeverScrollableScrollPhysics() : null,
-        children: _screens,
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        children: [
+          // Content (PageView)
+          PageView(
+            controller: _pageController,
+            onPageChanged: _onPageChanged,
+            physics: isDesktop ? const NeverScrollableScrollPhysics() : null,
+            children: _screens,
+          ),
+          // Desktop Navigation Overlay (über dem Content)
+          if (isDesktop) _buildDesktopNavOverlay(),
+        ],
       ),
       bottomNavigationBar: isDesktop ? null : _buildMobileBottomNavigation(),
     );

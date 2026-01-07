@@ -387,8 +387,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _player.seek(_existingProgress!.position);
-              _player.play();
+              _seekToResumePosition();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
@@ -402,6 +401,43 @@ class _PlayerScreenState extends State<PlayerScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _seekToResumePosition() async {
+    if (_existingProgress == null) {
+      _player.play();
+      return;
+    }
+
+    final targetPosition = _existingProgress!.position;
+
+    // Kurz warten bis der Player stabil ist
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!mounted) return;
+
+    // Seek ausführen
+    await _player.seek(targetPosition);
+
+    // Nochmal kurz warten und dann Position überprüfen
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    if (!mounted) return;
+
+    // Falls der Seek nicht geklappt hat, nochmal versuchen
+    final currentPos = _player.state.position;
+    final diff = (currentPos.inSeconds - targetPosition.inSeconds).abs();
+
+    if (diff > 5) {
+      // Position weicht mehr als 5 Sekunden ab, erneut versuchen
+      debugPrint('Seek retry: current=$currentPos, target=$targetPosition');
+      await _player.seek(targetPosition);
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    if (mounted) {
+      _player.play();
+    }
   }
 
   @override

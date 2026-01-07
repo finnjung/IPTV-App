@@ -64,7 +64,8 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
     final content = xtreamService.liveTvScreenContent;
-    final isLoading = xtreamService.isLoadingLiveTv;
+    // Auch Preloading berücksichtigen
+    final isLoading = xtreamService.isLoadingLiveTv || xtreamService.isPreloading;
 
     return Scaffold(
       body: !xtreamService.isConnected

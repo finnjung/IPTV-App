@@ -1,12 +1,15 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import 'cors_proxy_client.dart';
+import 'content_cache_service.dart';
 import '../models/watch_progress.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
+import '../data/curated_content.dart';
 
 class XtreamCredentials {
   final String serverUrl;
@@ -72,6 +75,12 @@ class XtreamService extends ChangeNotifier {
   bool _isLoadingSeries = false;
   bool _isLoadingLiveTv = false;
 
+  // Preloading State
+  bool _isPreloading = false;
+  double _preloadProgress = 0.0;
+  String _preloadStatus = '';
+  final ContentCacheService _cacheService = ContentCacheService();
+
   bool get isConnected => _isConnected;
   bool get isStartScreenLoading => _isLoadingStartScreen;
   StartScreenContent? get startScreenContent => _startScreenContent;
@@ -88,13 +97,28 @@ class XtreamService extends ChangeNotifier {
   XtreamCredentials? get credentials => _credentials;
   XTremeCodeGeneralInformation? get serverInfo => _serverInfo;
 
+  // Preloading Getters
+  bool get isPreloading => _isPreloading;
+  double get preloadProgress => _preloadProgress;
+  String get preloadStatus => _preloadStatus;
+
   List<XTremeCodeCategory>? get liveCategories => _liveCategories;
   List<XTremeCodeCategory>? get vodCategories => _vodCategories;
   List<XTremeCodeCategory>? get seriesCategories => _seriesCategories;
 
-  // Sortiert nach letztem Schauen, filtert abgeschlossene
+  // Sortiert nach letztem Schauen, filtert abgeschlossene und kaum geschaute
   List<WatchProgress> get continueWatching => _watchProgress
-      .where((p) => !p.isCompleted && p.position.inSeconds > 30)
+      .where((p) {
+        // Nicht anzeigen wenn >= 90% geschaut (ist completed)
+        if (p.isCompleted) return false;
+
+        // Minimum: 2 Minuten ODER 5% geschaut (das höhere von beiden)
+        final minSeconds = 120; // 2 Minuten
+        final minProgress = 0.05; // 5%
+        final hasWatchedEnough = p.position.inSeconds >= minSeconds || p.progress >= minProgress;
+
+        return hasWatchedEnough;
+      })
       .toList()
     ..sort((a, b) => b.lastWatched.compareTo(a.lastWatched));
 
@@ -222,8 +246,18 @@ class XtreamService extends ChangeNotifier {
         // Load categories in background
         _loadCategories();
 
+        // Start preloading all content
+        // Setze _isPreloading SYNCHRON, damit Screens darauf warten
+        _isPreloading = true;
+        _preloadProgress = 0.0;
+        _preloadStatus = 'Starte...';
+
         _isLoading = false;
         notifyListeners();
+
+        // Jetzt async preloaden (Screens warten auf _isPreloading)
+        preloadAllContent();
+
         return true;
       } else {
         throw Exception('Keine Serverantwort erhalten');
@@ -443,6 +477,193 @@ class XtreamService extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  // ==================== Content Preloading ====================
+
+  /// Lädt alle Vorschläge/kuratierten Inhalte vor und cached sie
+  Future<void> preloadAllContent({bool forceRefresh = false}) async {
+    if (_credentials == null || !_isConnected) return;
+
+    // Falls bereits preloading läuft (von connect() gestartet), nicht nochmal starten
+    // Aber wenn wir schon im preloading sind, weitermachen
+    final wasAlreadyPreloading = _isPreloading;
+
+    _isPreloading = true;
+    _preloadProgress = 0.0;
+    _preloadStatus = 'Prüfe Cache...';
+    if (!wasAlreadyPreloading) {
+      notifyListeners();
+    }
+
+    try {
+      // Step 1: Check if cache is valid
+      if (!forceRefresh && await _cacheService.isCacheValid(_credentials!)) {
+        // Load from cache
+        _preloadStatus = 'Lade gecachte Inhalte...';
+        _preloadProgress = 0.1;
+        notifyListeners();
+
+        await _loadFromCache();
+
+        _preloadProgress = 1.0;
+        _preloadStatus = 'Fertig';
+        notifyListeners();
+
+        debugPrint('Content loaded from cache');
+      } else {
+        // Fetch fresh data and cache it
+        await _fetchAndCacheAllContent();
+      }
+    } catch (e) {
+      debugPrint('Preload error: $e');
+      _preloadStatus = 'Fehler beim Laden';
+    } finally {
+      _isPreloading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Lädt alle Inhalte aus dem Cache
+  Future<void> _loadFromCache() async {
+    _preloadStatus = 'Lade Startseite...';
+    _preloadProgress = 0.2;
+    notifyListeners();
+
+    _startScreenContent = await _cacheService.loadStartScreenContent();
+    debugPrint('Cache: StartScreen loaded - ${_startScreenContent?.curatedMovies.length ?? 0} curated movies');
+
+    _preloadStatus = 'Lade Filme...';
+    _preloadProgress = 0.4;
+    notifyListeners();
+
+    _moviesScreenContent = await _cacheService.loadMoviesScreenContent();
+    debugPrint('Cache: MoviesScreen loaded - ${_moviesScreenContent?.categories.length ?? 0} categories');
+
+    _preloadStatus = 'Lade Serien...';
+    _preloadProgress = 0.6;
+    notifyListeners();
+
+    _seriesScreenContent = await _cacheService.loadSeriesScreenContent();
+    debugPrint('Cache: SeriesScreen loaded - ${_seriesScreenContent?.categories.length ?? 0} categories');
+
+    _preloadStatus = 'Lade Live TV...';
+    _preloadProgress = 0.8;
+    notifyListeners();
+
+    _liveTvScreenContent = await _cacheService.loadLiveTvScreenContent();
+    debugPrint('Cache: LiveTvScreen loaded - ${_liveTvScreenContent?.categories.length ?? 0} categories');
+  }
+
+  /// Lädt alle Inhalte von der API und cached sie
+  Future<void> _fetchAndCacheAllContent() async {
+    // Step 1: Load raw data (40%)
+    _preloadStatus = 'Lade Filme...';
+    _preloadProgress = 0.05;
+    notifyListeners();
+
+    final allMovies = await getMovies();
+    _preloadProgress = 0.15;
+    notifyListeners();
+
+    _preloadStatus = 'Lade Serien...';
+    final allSeries = await getSeries();
+    _preloadProgress = 0.25;
+    notifyListeners();
+
+    _preloadStatus = 'Lade Live TV...';
+    final allStreams = await getLiveStreams();
+    _preloadProgress = 0.35;
+    notifyListeners();
+
+    // Step 2: Process screen content (50%)
+    _preloadStatus = 'Verarbeite Inhalte...';
+    notifyListeners();
+
+    // Process all screen content
+    _startScreenContent = await _buildStartScreenContentInternal(allMovies, allSeries);
+    _preloadProgress = 0.50;
+    notifyListeners();
+
+    _moviesScreenContent = await compute(_buildMoviesScreenContent, allMovies);
+    _preloadProgress = 0.60;
+    notifyListeners();
+
+    _seriesScreenContent = await compute(_buildSeriesScreenContent, allSeries);
+    _preloadProgress = 0.70;
+    notifyListeners();
+
+    _liveTvScreenContent = await compute(_buildLiveTvScreenContent, allStreams);
+    _preloadProgress = 0.80;
+    notifyListeners();
+
+    // Step 3: Save to cache (20%)
+    _preloadStatus = 'Speichere Cache...';
+    notifyListeners();
+
+    await _cacheService.saveStartScreenContent(_startScreenContent!, _credentials!);
+    _preloadProgress = 0.85;
+    notifyListeners();
+
+    await _cacheService.saveMoviesScreenContent(_moviesScreenContent!, _credentials!);
+    _preloadProgress = 0.90;
+    notifyListeners();
+
+    await _cacheService.saveSeriesScreenContent(_seriesScreenContent!, _credentials!);
+    _preloadProgress = 0.95;
+    notifyListeners();
+
+    await _cacheService.saveLiveTvScreenContent(_liveTvScreenContent!, _credentials!);
+    _preloadProgress = 1.0;
+    _preloadStatus = 'Fertig';
+    notifyListeners();
+
+    debugPrint('Content fetched, processed and cached');
+  }
+
+  /// Interne Methode zum Aufbauen des StartScreen-Contents (ohne Caching-Logik)
+  Future<StartScreenContent> _buildStartScreenContentInternal(
+    List<XTremeCodeVodItem> allMovies,
+    List<XTremeCodeSeriesItem> allSeries,
+  ) async {
+    // Find popular content using compute for heavy parsing
+    final popularMovies = await compute(_filterPopularMovies, allMovies);
+    final popularSeries = await compute(_filterPopularSeries, allSeries);
+
+    // Find curated content
+    final curatedMovies = await compute(_filterCuratedMovies, allMovies);
+    final curatedSeries = await compute(_filterCuratedSeries, allSeries);
+    final curatedKids = await compute(_filterCuratedKids, _CuratedKidsParams(allMovies, allSeries));
+
+    // Find thematic content
+    final thrillerSeries = await compute(_filterThrillerSeries, allSeries);
+    final actionMovies = await compute(_filterActionMovies, allMovies);
+
+    // Find spotlight content for hero banner
+    final spotlight = _selectDailySpotlight(curatedMovies, curatedSeries, allMovies, allSeries);
+
+    // Generate daily section order
+    final sectionOrder = _getDailySectionOrder();
+
+    return StartScreenContent(
+      popularMovies: popularMovies.take(20).toList(),
+      popularSeries: popularSeries.take(20).toList(),
+      spotlight: spotlight,
+      curatedMovies: curatedMovies.take(25).toList(),
+      curatedSeries: curatedSeries.take(25).toList(),
+      curatedKids: curatedKids.take(20).toList(),
+      thrillerSeries: thrillerSeries.take(20).toList(),
+      actionMovies: actionMovies.take(20).toList(),
+      allMovies: [], // Wird bei Bedarf über "Alle Inhalte" geladen
+      allSeries: [], // Wird bei Bedarf über "Alle Inhalte" geladen
+      sectionOrder: sectionOrder,
+    );
+  }
+
+  /// Invalidiert den Cache und erzwingt ein Neuladen
+  Future<void> refreshAllContent() async {
+    await _cacheService.clearCache();
+    await preloadAllContent(forceRefresh: true);
   }
 
   /// Lädt die gespeicherten leeren Serien-IDs und Einstellungen
@@ -666,61 +887,63 @@ class XtreamService extends ChangeNotifier {
   // ==================== Start Screen Content ====================
 
   /// Lädt den Content für die Startseite (gecacht)
+  /// Wenn Content bereits vorgeladen ist, wird dieser sofort zurückgegeben
   Future<StartScreenContent> loadStartScreenContent({bool forceRefresh = false}) async {
-    // Return cached content if available
+    // Return cached content if available (from preload)
     if (_startScreenContent != null && !forceRefresh) {
+      // Falls aus Cache geladen und allMovies/allSeries leer sind, lade sie nach
+      if (_startScreenContent!.allMovies.isEmpty || _startScreenContent!.allSeries.isEmpty) {
+        await _fillStartScreenAllContent();
+      }
       return _startScreenContent!;
+    }
+
+    // Wait for preloading if in progress
+    if (_isPreloading) {
+      while (_isPreloading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (_startScreenContent != null) {
+        if (_startScreenContent!.allMovies.isEmpty || _startScreenContent!.allSeries.isEmpty) {
+          await _fillStartScreenAllContent();
+        }
+        return _startScreenContent!;
+      }
     }
 
     // Prevent multiple simultaneous loads
     if (_isLoadingStartScreen) {
-      // Wait for current load to finish
       while (_isLoadingStartScreen) {
         await Future.delayed(const Duration(milliseconds: 100));
       }
       return _startScreenContent ?? StartScreenContent.empty();
     }
 
+    // Fallback: Load manually if preload didn't happen
     _isLoadingStartScreen = true;
     notifyListeners();
 
     try {
-      // Load all content
       final allMovies = await getMovies();
       final allSeries = await getSeries();
-
-      // Find popular content (HOT, TOP, etc.) using compute for heavy parsing
-      final popularMovies = await compute(_filterPopularMovies, allMovies);
-      final popularSeries = await compute(_filterPopularSeries, allSeries);
-
-      // Get recommendations based on language preference
-      List<XTremeCodeVodItem> recommendedMovies;
-      List<XTremeCodeSeriesItem> recommendedSeries;
-
-      if (_preferredLanguage != null) {
-        recommendedMovies = await compute(
-          _sortMoviesByLanguage,
-          _SortParams(allMovies, _preferredLanguage!),
-        );
-        recommendedSeries = await compute(
-          _sortSeriesByLanguage,
-          _SortParams(allSeries, _preferredLanguage!),
-        );
-      } else {
-        // Random selection without language preference
-        recommendedMovies = List<XTremeCodeVodItem>.from(allMovies)..shuffle();
-        recommendedSeries = List<XTremeCodeSeriesItem>.from(allSeries)..shuffle();
-      }
-
+      _startScreenContent = await _buildStartScreenContentInternal(allMovies, allSeries);
+      // Fülle auch allMovies/allSeries
+      final sortedMovies = await compute(_sortAlphabetically, allMovies);
+      final sortedSeries = await compute(_sortSeriesAlphabetically, allSeries);
       _startScreenContent = StartScreenContent(
-        popularMovies: popularMovies.take(20).toList(),
-        popularSeries: popularSeries.take(20).toList(),
-        recommendedMovies: recommendedMovies.take(20).toList(),
-        recommendedSeries: recommendedSeries.take(20).toList(),
-        preferredLanguage: _preferredLanguage,
+        popularMovies: _startScreenContent!.popularMovies,
+        popularSeries: _startScreenContent!.popularSeries,
+        spotlight: _startScreenContent!.spotlight,
+        curatedMovies: _startScreenContent!.curatedMovies,
+        curatedSeries: _startScreenContent!.curatedSeries,
+        curatedKids: _startScreenContent!.curatedKids,
+        thrillerSeries: _startScreenContent!.thrillerSeries,
+        actionMovies: _startScreenContent!.actionMovies,
+        allMovies: sortedMovies,
+        allSeries: sortedSeries,
+        sectionOrder: _startScreenContent!.sectionOrder,
       );
-
-      debugPrint('Start screen content loaded: ${popularMovies.length} popular movies, ${popularSeries.length} popular series');
+      debugPrint('Start screen content loaded manually');
     } catch (e) {
       debugPrint('Error loading start screen content: $e');
       _startScreenContent = StartScreenContent.empty();
@@ -732,6 +955,184 @@ class XtreamService extends ChangeNotifier {
     return _startScreenContent!;
   }
 
+  /// Füllt allMovies/allSeries nach, wenn aus Cache geladen
+  Future<void> _fillStartScreenAllContent() async {
+    if (_startScreenContent == null) return;
+    final allMovies = await getMovies();
+    final allSeries = await getSeries();
+    final sortedMovies = await compute(_sortAlphabetically, allMovies);
+    final sortedSeries = await compute(_sortSeriesAlphabetically, allSeries);
+    _startScreenContent = StartScreenContent(
+      popularMovies: _startScreenContent!.popularMovies,
+      popularSeries: _startScreenContent!.popularSeries,
+      spotlight: _startScreenContent!.spotlight,
+      curatedMovies: _startScreenContent!.curatedMovies,
+      curatedSeries: _startScreenContent!.curatedSeries,
+      curatedKids: _startScreenContent!.curatedKids,
+      thrillerSeries: _startScreenContent!.thrillerSeries,
+      actionMovies: _startScreenContent!.actionMovies,
+      allMovies: sortedMovies,
+      allSeries: sortedSeries,
+      sectionOrder: _startScreenContent!.sectionOrder,
+    );
+  }
+
+  /// Lädt alle Filme für "Alle Inhalte" Ansicht (on-demand, nicht gecacht)
+  Future<List<XTremeCodeVodItem>> loadAllMoviesSorted() async {
+    final allMovies = await getMovies();
+    return compute(_sortAlphabetically, allMovies);
+  }
+
+  /// Lädt alle Serien für "Alle Inhalte" Ansicht (on-demand, nicht gecacht)
+  Future<List<XTremeCodeSeriesItem>> loadAllSeriesSorted() async {
+    final allSeries = await getSeries();
+    return compute(_sortSeriesAlphabetically, allSeries);
+  }
+
+  /// Wählt den täglichen Spotlight-Inhalt aus
+  SpotlightContent? _selectDailySpotlight(
+    List<XTremeCodeVodItem> curatedMovies,
+    List<XTremeCodeSeriesItem> curatedSeries,
+    List<XTremeCodeVodItem> allMovies,
+    List<XTremeCodeSeriesItem> allSeries,
+  ) {
+    // Sammle alle Spotlight-fähigen Inhalte
+    final spotlightCandidates = <_SpotlightCandidate>[];
+
+    for (final movie in curatedMovies) {
+      final meta = ContentParser.parse(movie.name ?? '');
+      if (meta.isSpotlightEligible) {
+        spotlightCandidates.add(_SpotlightCandidate(
+          item: movie,
+          isMovie: true,
+          metadata: meta,
+        ));
+      }
+    }
+
+    for (final series in curatedSeries) {
+      final meta = ContentParser.parse(series.name ?? '');
+      if (meta.isSpotlightEligible) {
+        spotlightCandidates.add(_SpotlightCandidate(
+          item: series,
+          isMovie: false,
+          metadata: meta,
+        ));
+      }
+    }
+
+    if (spotlightCandidates.isEmpty) {
+      // Fallback: Nimm irgendeinen kuratierten Titel
+      if (curatedMovies.isNotEmpty) {
+        final movie = curatedMovies.first;
+        final meta = ContentParser.parse(movie.name ?? '');
+        if (meta.curatedMatch != null) {
+          return SpotlightContent(
+            name: meta.cleanName,
+            imageUrl: movie.streamIcon,
+            quality: meta.quality,
+            language: meta.language,
+            curatedTitle: meta.curatedMatch!,
+            isMovie: true,
+            originalItem: movie,
+          );
+        }
+      }
+      if (curatedSeries.isNotEmpty) {
+        final series = curatedSeries.first;
+        final meta = ContentParser.parse(series.name ?? '');
+        if (meta.curatedMatch != null) {
+          return SpotlightContent(
+            name: meta.cleanName,
+            imageUrl: series.cover,
+            quality: meta.quality,
+            language: meta.language,
+            curatedTitle: meta.curatedMatch!,
+            isMovie: false,
+            originalItem: series,
+          );
+        }
+      }
+      // Absoluter Fallback: 4K Film wenn verfügbar
+      for (final movie in allMovies) {
+        final meta = ContentParser.parse(movie.name ?? '');
+        if (meta.quality == '4K') {
+          return SpotlightContent(
+            name: meta.cleanName,
+            imageUrl: movie.streamIcon,
+            quality: meta.quality,
+            language: meta.language,
+            curatedTitle: CuratedTitle(meta.cleanName, CuratedCategory.movie),
+            isMovie: true,
+            originalItem: movie,
+          );
+        }
+      }
+      return null;
+    }
+
+    // Wähle basierend auf Tag des Jahres (konsistent pro Tag)
+    final now = DateTime.now();
+    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
+    final index = dayOfYear % spotlightCandidates.length;
+    final selected = spotlightCandidates[index];
+
+    if (selected.isMovie) {
+      final movie = selected.item as XTremeCodeVodItem;
+      return SpotlightContent(
+        name: selected.metadata.cleanName,
+        imageUrl: movie.streamIcon,
+        quality: selected.metadata.quality,
+        language: selected.metadata.language,
+        curatedTitle: selected.metadata.curatedMatch!,
+        isMovie: true,
+        originalItem: movie,
+      );
+    } else {
+      final series = selected.item as XTremeCodeSeriesItem;
+      return SpotlightContent(
+        name: selected.metadata.cleanName,
+        imageUrl: series.cover,
+        quality: selected.metadata.quality,
+        language: selected.metadata.language,
+        curatedTitle: selected.metadata.curatedMatch!,
+        isMovie: false,
+        originalItem: series,
+      );
+    }
+  }
+
+  /// Generiert die tägliche Section-Reihenfolge
+  List<StartScreenSection> _getDailySectionOrder() {
+    // Feste Sections oben - "Das gefällt dir bestimmt" immer zuerst nach Hero
+    final fixedSections = [
+      StartScreenSection.curatedPopular,
+      StartScreenSection.continueWatching,
+      StartScreenSection.favorites,
+    ];
+
+    // Sections die geshuffled werden (ohne "Alle" - die kommen immer am Ende)
+    final shuffleableSections = [
+      StartScreenSection.curatedKids,
+      StartScreenSection.thrillerSeries,
+      StartScreenSection.actionMovies,
+    ];
+
+    // Feste Sections am Ende
+    final endSections = [
+      StartScreenSection.allMovies,
+      StartScreenSection.allSeries,
+    ];
+
+    // Seed basierend auf Tag (konsistent pro Tag)
+    final now = DateTime.now();
+    final seed = now.day + now.month * 31 + now.year * 365;
+    final random = Random(seed);
+    shuffleableSections.shuffle(random);
+
+    return [...fixedSections, ...shuffleableSections, ...endSections];
+  }
+
   /// Invalidiert den Start Screen Cache
   void invalidateStartScreenCache() {
     _startScreenContent = null;
@@ -741,10 +1142,28 @@ class XtreamService extends ChangeNotifier {
   // ==================== Movies Screen Content ====================
 
   /// Lädt den Content für den Movies Screen (gecacht)
+  /// Wenn Content bereits vorgeladen ist, wird dieser sofort zurückgegeben
   Future<MoviesScreenContent> loadMoviesScreenContent({bool forceRefresh = false}) async {
-    // Return cached content if available
+    // Return cached content if available (from preload)
     if (_moviesScreenContent != null && !forceRefresh) {
+      // Falls aus Cache geladen und allMoviesSorted leer ist, lade sie nach
+      if (_moviesScreenContent!.allMoviesSorted.isEmpty) {
+        await _fillMoviesAllSorted();
+      }
       return _moviesScreenContent!;
+    }
+
+    // Wait for preloading if in progress
+    if (_isPreloading) {
+      while (_isPreloading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (_moviesScreenContent != null) {
+        if (_moviesScreenContent!.allMoviesSorted.isEmpty) {
+          await _fillMoviesAllSorted();
+        }
+        return _moviesScreenContent!;
+      }
     }
 
     // Prevent multiple simultaneous loads
@@ -755,13 +1174,14 @@ class XtreamService extends ChangeNotifier {
       return _moviesScreenContent ?? MoviesScreenContent.empty();
     }
 
+    // Fallback: Load manually if preload didn't happen
     _isLoadingMovies = true;
     notifyListeners();
 
     try {
       final allMovies = await getMovies();
       _moviesScreenContent = await compute(_buildMoviesScreenContent, allMovies);
-      debugPrint('Movies screen content loaded: ${_moviesScreenContent!.categories.length} categories, ${_moviesScreenContent!.allMoviesSorted.length} total');
+      debugPrint('Movies screen content loaded manually');
     } catch (e) {
       debugPrint('Error loading movies screen content: $e');
       _moviesScreenContent = MoviesScreenContent.empty();
@@ -773,13 +1193,42 @@ class XtreamService extends ChangeNotifier {
     return _moviesScreenContent!;
   }
 
+  /// Füllt allMoviesSorted nach, wenn aus Cache geladen
+  Future<void> _fillMoviesAllSorted() async {
+    if (_moviesScreenContent == null) return;
+    final allMovies = await getMovies();
+    final sortedMovies = await compute(_sortAlphabetically, allMovies);
+    _moviesScreenContent = MoviesScreenContent(
+      categories: _moviesScreenContent!.categories,
+      allMoviesSorted: sortedMovies,
+    );
+  }
+
   // ==================== Series Screen Content ====================
 
   /// Lädt den Content für den Series Screen (gecacht)
+  /// Wenn Content bereits vorgeladen ist, wird dieser sofort zurückgegeben
   Future<SeriesScreenContent> loadSeriesScreenContent({bool forceRefresh = false}) async {
-    // Return cached content if available
+    // Return cached content if available (from preload)
     if (_seriesScreenContent != null && !forceRefresh) {
+      // Falls aus Cache geladen und allSeriesSorted leer ist, lade sie nach
+      if (_seriesScreenContent!.allSeriesSorted.isEmpty) {
+        await _fillSeriesAllSorted();
+      }
       return _seriesScreenContent!;
+    }
+
+    // Wait for preloading if in progress
+    if (_isPreloading) {
+      while (_isPreloading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (_seriesScreenContent != null) {
+        if (_seriesScreenContent!.allSeriesSorted.isEmpty) {
+          await _fillSeriesAllSorted();
+        }
+        return _seriesScreenContent!;
+      }
     }
 
     // Prevent multiple simultaneous loads
@@ -790,13 +1239,14 @@ class XtreamService extends ChangeNotifier {
       return _seriesScreenContent ?? SeriesScreenContent.empty();
     }
 
+    // Fallback: Load manually if preload didn't happen
     _isLoadingSeries = true;
     notifyListeners();
 
     try {
       final allSeries = await getSeries();
       _seriesScreenContent = await compute(_buildSeriesScreenContent, allSeries);
-      debugPrint('Series screen content loaded: ${_seriesScreenContent!.categories.length} categories, ${_seriesScreenContent!.allSeriesSorted.length} total');
+      debugPrint('Series screen content loaded manually');
     } catch (e) {
       debugPrint('Error loading series screen content: $e');
       _seriesScreenContent = SeriesScreenContent.empty();
@@ -808,13 +1258,42 @@ class XtreamService extends ChangeNotifier {
     return _seriesScreenContent!;
   }
 
+  /// Füllt allSeriesSorted nach, wenn aus Cache geladen
+  Future<void> _fillSeriesAllSorted() async {
+    if (_seriesScreenContent == null) return;
+    final allSeries = await getSeries();
+    final sortedSeries = await compute(_sortSeriesAlphabetically, allSeries);
+    _seriesScreenContent = SeriesScreenContent(
+      categories: _seriesScreenContent!.categories,
+      allSeriesSorted: sortedSeries,
+    );
+  }
+
   // ==================== Live TV Screen Content ====================
 
   /// Lädt den Content für den Live TV Screen (gecacht)
+  /// Wenn Content bereits vorgeladen ist, wird dieser sofort zurückgegeben
   Future<LiveTvScreenContent> loadLiveTvScreenContent({bool forceRefresh = false}) async {
-    // Return cached content if available
+    // Return cached content if available (from preload)
     if (_liveTvScreenContent != null && !forceRefresh) {
+      // Falls aus Cache geladen und allStreamsSorted leer ist, lade sie nach
+      if (_liveTvScreenContent!.allStreamsSorted.isEmpty) {
+        await _fillLiveTvAllSorted();
+      }
       return _liveTvScreenContent!;
+    }
+
+    // Wait for preloading if in progress
+    if (_isPreloading) {
+      while (_isPreloading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (_liveTvScreenContent != null) {
+        if (_liveTvScreenContent!.allStreamsSorted.isEmpty) {
+          await _fillLiveTvAllSorted();
+        }
+        return _liveTvScreenContent!;
+      }
     }
 
     // Prevent multiple simultaneous loads
@@ -825,13 +1304,14 @@ class XtreamService extends ChangeNotifier {
       return _liveTvScreenContent ?? LiveTvScreenContent.empty();
     }
 
+    // Fallback: Load manually if preload didn't happen
     _isLoadingLiveTv = true;
     notifyListeners();
 
     try {
       final allStreams = await getLiveStreams();
       _liveTvScreenContent = await compute(_buildLiveTvScreenContent, allStreams);
-      debugPrint('Live TV screen content loaded: ${_liveTvScreenContent!.categories.length} categories, ${_liveTvScreenContent!.allStreamsSorted.length} total');
+      debugPrint('Live TV screen content loaded manually');
     } catch (e) {
       debugPrint('Error loading live TV screen content: $e');
       _liveTvScreenContent = LiveTvScreenContent.empty();
@@ -841,6 +1321,17 @@ class XtreamService extends ChangeNotifier {
     notifyListeners();
 
     return _liveTvScreenContent!;
+  }
+
+  /// Füllt allStreamsSorted nach, wenn aus Cache geladen
+  Future<void> _fillLiveTvAllSorted() async {
+    if (_liveTvScreenContent == null) return;
+    final allStreams = await getLiveStreams();
+    final sortedStreams = await compute(_sortLiveStreamsAlphabetically, allStreams);
+    _liveTvScreenContent = LiveTvScreenContent(
+      categories: _liveTvScreenContent!.categories,
+      allStreamsSorted: sortedStreams,
+    );
   }
 
   /// Sucht nach Filmen, Serien und Live TV
@@ -903,33 +1394,105 @@ class SearchResults {
 
 // ==================== Start Screen Content ====================
 
+/// Typen von Sections die auf der Startseite angezeigt werden können
+enum StartScreenSection {
+  continueWatching,
+  favorites,
+  curatedPopular,
+  curatedKids,
+  thrillerSeries,
+  actionMovies,
+  allMovies,
+  allSeries,
+}
+
+/// Spotlight-Inhalt für das Hero-Banner
+class SpotlightContent {
+  final String name;
+  final String? imageUrl;
+  final String? quality;
+  final String? language;
+  final CuratedTitle curatedTitle;
+  final bool isMovie; // true = Film, false = Serie
+  final dynamic originalItem; // XTremeCodeVodItem oder XTremeCodeSeriesItem
+
+  SpotlightContent({
+    required this.name,
+    this.imageUrl,
+    this.quality,
+    this.language,
+    required this.curatedTitle,
+    required this.isMovie,
+    required this.originalItem,
+  });
+}
+
 class StartScreenContent {
   final List<XTremeCodeVodItem> popularMovies;
   final List<XTremeCodeSeriesItem> popularSeries;
-  final List<XTremeCodeVodItem> recommendedMovies;
-  final List<XTremeCodeSeriesItem> recommendedSeries;
-  final String? preferredLanguage;
+
+  /// Spotlight für Hero-Banner
+  final SpotlightContent? spotlight;
+
+  /// Kuratierte beliebte Filme
+  final List<XTremeCodeVodItem> curatedMovies;
+
+  /// Kuratierte beliebte Serien
+  final List<XTremeCodeSeriesItem> curatedSeries;
+
+  /// Kuratierte Kinderinhalte (Filme + Serien gemischt)
+  final List<dynamic> curatedKids;
+
+  /// Spannende Serien (Thriller, Crime, Drama)
+  final List<XTremeCodeSeriesItem> thrillerSeries;
+
+  /// Action Filme
+  final List<XTremeCodeVodItem> actionMovies;
+
+  /// Alle Filme (alphabetisch sortiert)
+  final List<XTremeCodeVodItem> allMovies;
+
+  /// Alle Serien (alphabetisch sortiert)
+  final List<XTremeCodeSeriesItem> allSeries;
+
+  /// Dynamische Section-Reihenfolge für heute
+  final List<StartScreenSection> sectionOrder;
 
   StartScreenContent({
     required this.popularMovies,
     required this.popularSeries,
-    required this.recommendedMovies,
-    required this.recommendedSeries,
-    this.preferredLanguage,
+    this.spotlight,
+    this.curatedMovies = const [],
+    this.curatedSeries = const [],
+    this.curatedKids = const [],
+    this.thrillerSeries = const [],
+    this.actionMovies = const [],
+    this.allMovies = const [],
+    this.allSeries = const [],
+    this.sectionOrder = const [],
   });
 
   factory StartScreenContent.empty() => StartScreenContent(
         popularMovies: [],
         popularSeries: [],
-        recommendedMovies: [],
-        recommendedSeries: [],
+        curatedMovies: [],
+        curatedSeries: [],
+        curatedKids: [],
+        thrillerSeries: [],
+        actionMovies: [],
+        allMovies: [],
+        allSeries: [],
+        sectionOrder: [],
       );
 
   bool get isEmpty =>
       popularMovies.isEmpty &&
       popularSeries.isEmpty &&
-      recommendedMovies.isEmpty &&
-      recommendedSeries.isEmpty;
+      curatedMovies.isEmpty &&
+      curatedSeries.isEmpty;
+
+  /// Alle kuratierten Inhalte (Filme + Serien)
+  List<dynamic> get allCurated => [...curatedMovies, ...curatedSeries];
 }
 
 // Helper class for isolate parameters
@@ -957,46 +1520,202 @@ List<XTremeCodeSeriesItem> _filterPopularSeries(List<XTremeCodeSeriesItem> serie
   }).toList();
 }
 
-List<XTremeCodeVodItem> _sortMoviesByLanguage(_SortParams<XTremeCodeVodItem> params) {
-  // Optimiert: Quick-Filter für Sprache, dann nur Top-Ergebnisse sortieren
-  final preferredLang = params.language.toUpperCase();
+// ==================== Curated Content Filtering ====================
 
-  // Erst alle mit bevorzugter Sprache finden (Quick-Check)
-  final preferred = <XTremeCodeVodItem>[];
-  final others = <XTremeCodeVodItem>[];
+/// Helper class für Spotlight-Kandidaten
+class _SpotlightCandidate {
+  final dynamic item;
+  final bool isMovie;
+  final ContentMetadata metadata;
 
-  for (final movie in params.items) {
-    final lang = ContentParser.getLanguageQuick(movie.name ?? '');
-    if (lang == preferredLang || lang == 'DE' && preferredLang == 'GERMAN') {
-      preferred.add(movie);
-    } else {
-      others.add(movie);
-    }
-  }
-
-  // Bevorzugte zuerst, dann Rest
-  return [...preferred, ...others];
+  _SpotlightCandidate({
+    required this.item,
+    required this.isMovie,
+    required this.metadata,
+  });
 }
 
-List<XTremeCodeSeriesItem> _sortSeriesByLanguage(_SortParams<XTremeCodeSeriesItem> params) {
-  // Optimiert: Quick-Filter für Sprache, dann nur Top-Ergebnisse sortieren
-  final preferredLang = params.language.toUpperCase();
+/// Helper class für Curated Kids Filtering
+class _CuratedKidsParams {
+  final List<XTremeCodeVodItem> movies;
+  final List<XTremeCodeSeriesItem> series;
 
-  // Erst alle mit bevorzugter Sprache finden (Quick-Check)
-  final preferred = <XTremeCodeSeriesItem>[];
-  final others = <XTremeCodeSeriesItem>[];
+  _CuratedKidsParams(this.movies, this.series);
+}
 
-  for (final series in params.items) {
-    final lang = ContentParser.getLanguageQuick(series.name ?? '');
-    if (lang == preferredLang || lang == 'DE' && preferredLang == 'GERMAN') {
-      preferred.add(series);
-    } else {
-      others.add(series);
+/// Filtert kuratierte Filme (bekannte Titel)
+List<XTremeCodeVodItem> _filterCuratedMovies(List<XTremeCodeVodItem> movies) {
+  final result = <XTremeCodeVodItem>[];
+
+  for (final movie in movies) {
+    final meta = ContentParser.parse(movie.name ?? '');
+    if (meta.isCurated &&
+        (meta.curatedMatch!.category == CuratedCategory.movie ||
+         meta.curatedMatch!.category == CuratedCategory.documentary)) {
+      result.add(movie);
+      if (result.length >= 50) break; // Limit für Performance
     }
   }
 
-  // Bevorzugte zuerst, dann Rest
-  return [...preferred, ...others];
+  // Sortiere nach Match-Score (beste zuerst)
+  result.sort((a, b) {
+    final metaA = ContentParser.parse(a.name ?? '');
+    final metaB = ContentParser.parse(b.name ?? '');
+    return metaB.curatedMatchScore.compareTo(metaA.curatedMatchScore);
+  });
+
+  return result;
+}
+
+/// Filtert kuratierte Serien (bekannte Titel)
+List<XTremeCodeSeriesItem> _filterCuratedSeries(List<XTremeCodeSeriesItem> series) {
+  final result = <XTremeCodeSeriesItem>[];
+
+  for (final s in series) {
+    final meta = ContentParser.parse(s.name ?? '');
+    if (meta.isCurated && meta.curatedMatch!.category == CuratedCategory.series) {
+      result.add(s);
+      if (result.length >= 50) break; // Limit für Performance
+    }
+  }
+
+  // Sortiere nach Match-Score (beste zuerst)
+  result.sort((a, b) {
+    final metaA = ContentParser.parse(a.name ?? '');
+    final metaB = ContentParser.parse(b.name ?? '');
+    return metaB.curatedMatchScore.compareTo(metaA.curatedMatchScore);
+  });
+
+  return result;
+}
+
+/// Filtert kuratierte Kinderinhalte (Filme + Serien)
+List<dynamic> _filterCuratedKids(_CuratedKidsParams params) {
+  final result = <dynamic>[];
+
+  // Filme durchsuchen
+  for (final movie in params.movies) {
+    final meta = ContentParser.parse(movie.name ?? '');
+    if (meta.isCurated && meta.curatedMatch!.category == CuratedCategory.kids) {
+      result.add(movie);
+    }
+  }
+
+  // Serien durchsuchen
+  for (final series in params.series) {
+    final meta = ContentParser.parse(series.name ?? '');
+    if (meta.isCurated && meta.curatedMatch!.category == CuratedCategory.kids) {
+      result.add(series);
+    }
+  }
+
+  // Sortiere nach Match-Score
+  result.sort((a, b) {
+    final nameA = a is XTremeCodeVodItem ? a.name : (a as XTremeCodeSeriesItem).name;
+    final nameB = b is XTremeCodeVodItem ? b.name : (b as XTremeCodeSeriesItem).name;
+    final metaA = ContentParser.parse(nameA ?? '');
+    final metaB = ContentParser.parse(nameB ?? '');
+    return metaB.curatedMatchScore.compareTo(metaA.curatedMatchScore);
+  });
+
+  return result.take(30).toList();
+}
+
+/// Filtert spannende Serien (Thriller, Crime, Drama) basierend auf bekannten Titeln
+List<XTremeCodeSeriesItem> _filterThrillerSeries(List<XTremeCodeSeriesItem> series) {
+  // Liste bekannter spannender Serien
+  const thrillerTitles = [
+    'breaking bad', 'better call saul', 'ozark', 'narcos', 'money heist',
+    'casa de papel', 'haus des geldes', 'dark', 'squid game', 'mindhunter',
+    'true detective', 'fargo', 'the wire', 'dexter', 'hannibal',
+    'sherlock', 'homeland', 'prison break', 'the boys', 'peaky blinders',
+    'you', 'killing eve', 'the sinner', 'the fall', 'mare of easttown',
+    'mare', 'yellowjackets', 'severance', 'the night of', 'big little lies',
+    'sharp objects', 'the undoing', 'the outsider', 'from', 'the last of us',
+    'chernobyl', 'band of brothers', 'the americans', 'the blacklist',
+    'person of interest', 'mr robot', 'westworld', 'lost', 'the 100',
+    'the walking dead', 'fear the walking dead', 'vikings',
+  ];
+
+  final result = <XTremeCodeSeriesItem>[];
+
+  for (final s in series) {
+    final name = s.name?.toLowerCase() ?? '';
+    for (final title in thrillerTitles) {
+      if (name.contains(title)) {
+        result.add(s);
+        break;
+      }
+    }
+    if (result.length >= 30) break;
+  }
+
+  return result;
+}
+
+/// Filtert Action-Filme basierend auf bekannten Titeln
+List<XTremeCodeVodItem> _filterActionMovies(List<XTremeCodeVodItem> movies) {
+  // Liste bekannter Action-Filme
+  const actionTitles = [
+    'john wick', 'fast', 'furious', 'mission impossible', 'top gun',
+    'mad max', 'die hard', 'terminator', 'predator', 'rambo',
+    'expendables', 'taken', 'matrix', 'batman', 'dark knight',
+    'avengers', 'iron man', 'thor', 'captain america', 'black panther',
+    'spider-man', 'spider man', 'deadpool', 'wolverine', 'x-men',
+    'transformers', 'pacific rim', 'godzilla', 'kong', 'jurassic',
+    'indiana jones', 'james bond', '007', 'bourne', 'jack reacher',
+    'equalizer', 'nobody', 'bullet train', 'extraction', 'tyler rake',
+    'raid', 'old guard', 'gray man', 'fall guy', 'furiosa',
+    'rebel moon', 'civil war', 'twisters',
+  ];
+
+  final result = <XTremeCodeVodItem>[];
+
+  for (final m in movies) {
+    final name = m.name?.toLowerCase() ?? '';
+    for (final title in actionTitles) {
+      if (name.contains(title)) {
+        result.add(m);
+        break;
+      }
+    }
+    if (result.length >= 30) break;
+  }
+
+  return result;
+}
+
+/// Sortiert Filme alphabetisch
+List<XTremeCodeVodItem> _sortAlphabetically(List<XTremeCodeVodItem> movies) {
+  final sorted = List<XTremeCodeVodItem>.from(movies);
+  sorted.sort((a, b) {
+    final nameA = ContentParser.parse(a.name ?? '').cleanName.toLowerCase();
+    final nameB = ContentParser.parse(b.name ?? '').cleanName.toLowerCase();
+    return nameA.compareTo(nameB);
+  });
+  return sorted;
+}
+
+/// Sortiert Serien alphabetisch
+List<XTremeCodeSeriesItem> _sortSeriesAlphabetically(List<XTremeCodeSeriesItem> series) {
+  final sorted = List<XTremeCodeSeriesItem>.from(series);
+  sorted.sort((a, b) {
+    final nameA = ContentParser.parse(a.name ?? '').cleanName.toLowerCase();
+    final nameB = ContentParser.parse(b.name ?? '').cleanName.toLowerCase();
+    return nameA.compareTo(nameB);
+  });
+  return sorted;
+}
+
+/// Sortiert Live-Streams alphabetisch
+List<XTremeCodeLiveStreamItem> _sortLiveStreamsAlphabetically(List<XTremeCodeLiveStreamItem> streams) {
+  final sorted = List<XTremeCodeLiveStreamItem>.from(streams);
+  sorted.sort((a, b) {
+    final nameA = (a.name ?? '').toLowerCase();
+    final nameB = (b.name ?? '').toLowerCase();
+    return nameA.compareTo(nameB);
+  });
+  return sorted;
 }
 
 // ==================== Movies Screen Content ====================
@@ -1027,7 +1746,8 @@ class MoviesScreenContent {
         allMoviesSorted: [],
       );
 
-  bool get isEmpty => allMoviesSorted.isEmpty;
+  // isEmpty prüft categories, nicht allMoviesSorted (das wird on-demand geladen)
+  bool get isEmpty => categories.isEmpty;
 }
 
 class SeriesScreenContent {
@@ -1044,7 +1764,8 @@ class SeriesScreenContent {
         allSeriesSorted: [],
       );
 
-  bool get isEmpty => allSeriesSorted.isEmpty;
+  // isEmpty prüft categories, nicht allSeriesSorted (das wird on-demand geladen)
+  bool get isEmpty => categories.isEmpty;
 }
 
 class LiveTvScreenContent {
@@ -1061,7 +1782,8 @@ class LiveTvScreenContent {
         allStreamsSorted: [],
       );
 
-  bool get isEmpty => allStreamsSorted.isEmpty;
+  // isEmpty prüft categories, nicht allStreamsSorted (das wird on-demand geladen)
+  bool get isEmpty => categories.isEmpty;
 }
 
 // ============== OPTIMIERTE Isolate-Funktionen ==============
@@ -1085,14 +1807,6 @@ bool _nameContainsAny(String upperName, List<String> keywords) {
     if (upperName.contains(keyword)) return true;
   }
   return false;
-}
-
-/// Hilfsfunktion: Optimierte alphabetische Sortierung mit pre-computed keys
-List<T> _sortAlphabetically<T>(List<T> items, String Function(T) getName) {
-  // Pre-compute lowercase names (O(n) statt O(n log n) toLowerCase calls)
-  final withKeys = items.map((item) => (item: item, key: getName(item).toLowerCase())).toList();
-  withKeys.sort((a, b) => a.key.compareTo(b.key));
-  return withKeys.map((e) => e.item).toList();
 }
 
 MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies) {
@@ -1152,7 +1866,7 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
   }
 
   // Optimierte alphabetische Sortierung
-  final sortedMovies = _sortAlphabetically(allMovies, (m) => m.name ?? '');
+  final sortedMovies = _sortAlphabetically(allMovies);
 
   return MoviesScreenContent(
     categories: categories,
@@ -1217,7 +1931,7 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
   }
 
   // Optimierte alphabetische Sortierung
-  final sortedSeries = _sortAlphabetically(allSeries, (s) => s.name ?? '');
+  final sortedSeries = _sortSeriesAlphabetically(allSeries);
 
   return SeriesScreenContent(
     categories: categories,
@@ -1290,7 +2004,7 @@ LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> all
   }
 
   // Optimierte alphabetische Sortierung
-  final sortedStreams = _sortAlphabetically(allStreams, (s) => s.name ?? '');
+  final sortedStreams = _sortLiveStreamsAlphabetically(allStreams);
 
   return LiveTvScreenContent(
     categories: categories,
