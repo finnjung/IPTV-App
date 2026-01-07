@@ -256,7 +256,11 @@ class _PlayerScreenState extends State<PlayerScreen>
               _pauseTitleTimer?.cancel();
               _pauseTitleTimer = Timer(const Duration(seconds: 3), () {
                 if (mounted && _isPaused) {
-                  setState(() => _showPauseTitle = true);
+                  setState(() {
+                    _showPauseTitle = true;
+                    _controlsVisible = false; // Controls ausblenden wenn Titel erscheint
+                    _cursorVisible = false; // Cursor auch ausblenden
+                  });
                   _pauseTitleController.forward();
                 }
               });
@@ -485,9 +489,21 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _showControls() {
-    setState(() => _controlsVisible = true);
+    setState(() {
+      _controlsVisible = true;
+      _cursorVisible = true; // Cursor auch anzeigen
+    });
+
+    // Pause-Titel smooth ausblenden wenn Controls angezeigt werden
+    if (_showPauseTitle) {
+      _pauseTitleController.animateTo(0, duration: const Duration(milliseconds: 300)).then((_) {
+        if (mounted) setState(() => _showPauseTitle = false);
+      });
+    }
+
     if (!_isPaused) {
       _startHideControlsTimer();
+      _startHideCursorTimer();
     }
   }
 
@@ -832,12 +848,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         onHover: (_) {
           _showCursor();
           if (!_controlsVisible) _showControls();
-          // Bei Mausbewegung Pause-Titel smooth ausblenden
-          if (_showPauseTitle) {
-            _pauseTitleController.animateTo(0, duration: const Duration(milliseconds: 300)).then((_) {
-              if (mounted) setState(() => _showPauseTitle = false);
-            });
-          }
         },
         child: Stack(
           children: [
