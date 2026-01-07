@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,12 +30,59 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isSearching = false;
   String _lastQuery = '';
 
+  // Discovery data
+  List<XTremeCodeVodItem> _suggestedMovies = [];
+  List<XTremeCodeSeriesItem> _suggestedSeries = [];
+
+  static const List<String> _quickSearchTerms = [
+    'Action',
+    'Comedy',
+    'Drama',
+    'Horror',
+    'Thriller',
+    'Sci-Fi',
+    'Romance',
+    'Animation',
+    'Documentary',
+    'Crime',
+  ];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+      _loadDiscoveryContent();
     });
+  }
+
+  void _loadDiscoveryContent() {
+    final xtreamService = context.read<XtreamService>();
+    final content = xtreamService.startScreenContent;
+
+    if (content != null) {
+      final random = Random();
+
+      // Get random movies from curated or all movies
+      final movieSource = content.curatedMovies.isNotEmpty
+          ? content.curatedMovies
+          : content.allMovies;
+      if (movieSource.isNotEmpty) {
+        final shuffled = List<XTremeCodeVodItem>.from(movieSource)..shuffle(random);
+        _suggestedMovies = shuffled.take(10).toList();
+      }
+
+      // Get random series from curated or all series
+      final seriesSource = content.curatedSeries.isNotEmpty
+          ? content.curatedSeries
+          : content.allSeries;
+      if (seriesSource.isNotEmpty) {
+        final shuffled = List<XTremeCodeSeriesItem>.from(seriesSource)..shuffle(random);
+        _suggestedSeries = shuffled.take(10).toList();
+      }
+
+      setState(() {});
+    }
   }
 
   @override
@@ -135,159 +185,179 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Extra top padding für macOS Titelleiste
+    final isMacOS = !kIsWeb && Platform.isMacOS;
+    final topPadding = isMacOS ? 28.0 : 0.0;
+
+    final safePadding = MediaQuery.of(context).padding.top;
+    final headerHeight = 160.0 + topPadding + safePadding;
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header mit Suchfeld
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/arrow-left.svg',
-                            width: 24,
-                            height: 24,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface,
-                              BlendMode.srcIn,
+      backgroundColor: bgColor,
+      body: Stack(
+        children: [
+          // Content (scrollt unter dem Header)
+          _buildContentWithPadding(colorScheme, headerHeight),
+
+          // Header mit Gradient (schwebt über dem Content)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    bgColor,
+                    bgColor,
+                    bgColor.withAlpha(0),
+                  ],
+                  stops: const [0.0, 0.85, 1.0],
+                ),
+              ),
+              padding: EdgeInsets.fromLTRB(20, safePadding + 20 + topPadding, 20, 30),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: SvgPicture.asset(
+                              'assets/icons/arrow-left.svg',
+                              width: 24,
+                              height: 24,
+                              colorFilter: ColorFilter.mode(
+                                colorScheme.onSurface,
+                                BlendMode.srcIn,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'Suche',
-                          style: GoogleFonts.poppins(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            'Suche',
+                            style: GoogleFonts.poppins(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Suchfeld
-                  Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
+                      ],
                     ),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _focusNode,
-                      onChanged: _onSearchChanged,
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        color: colorScheme.onSurface,
+                    const SizedBox(height: 20),
+                    // Suchfeld
+                    Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      decoration: InputDecoration(
-                        hintText: 'Filme, Serien, Live TV...',
-                        hintStyle: GoogleFonts.poppins(
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _focusNode,
+                        onChanged: _onSearchChanged,
+                        style: GoogleFonts.poppins(
                           fontSize: 16,
-                          color: colorScheme.onSurface.withAlpha(100),
+                          color: colorScheme.onSurface,
                         ),
-                        prefixIcon: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: SvgPicture.asset(
-                            'assets/icons/magnifying-glass.svg',
-                            width: 22,
-                            height: 22,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface.withAlpha(150),
-                              BlendMode.srcIn,
+                        decoration: InputDecoration(
+                          hintText: 'Filme, Serien, Live TV...',
+                          hintStyle: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: colorScheme.onSurface.withAlpha(100),
+                          ),
+                          prefixIcon: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: SvgPicture.asset(
+                              'assets/icons/magnifying-glass.svg',
+                              width: 22,
+                              height: 22,
+                              colorFilter: ColorFilter.mode(
+                                colorScheme.onSurface.withAlpha(150),
+                                BlendMode.srcIn,
+                              ),
                             ),
                           ),
-                        ),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? GestureDetector(
-                                onTap: () {
-                                  _searchController.clear();
-                                  _onSearchChanged('');
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(14),
-                                  child: SvgPicture.asset(
-                                    'assets/icons/x.svg',
-                                    width: 20,
-                                    height: 20,
-                                    colorFilter: ColorFilter.mode(
-                                      colorScheme.onSurface.withAlpha(150),
-                                      BlendMode.srcIn,
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? GestureDetector(
+                                  onTap: () {
+                                    _searchController.clear();
+                                    _onSearchChanged('');
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: SvgPicture.asset(
+                                      'assets/icons/x.svg',
+                                      width: 20,
+                                      height: 20,
+                                      colorFilter: ColorFilter.mode(
+                                        colorScheme.onSurface.withAlpha(150),
+                                        BlendMode.srcIn,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 16,
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-
-            // Ergebnisse
-            Expanded(
-              child: _buildContent(colorScheme),
             ),
           ],
         ),
-      ),
     );
   }
 
-  Widget _buildContent(ColorScheme colorScheme) {
+  Widget _buildContentWithPadding(ColorScheme colorScheme, double topPadding) {
     if (_isSearching) {
-      return const Center(child: CircularProgressIndicator());
+      return Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: const Center(child: CircularProgressIndicator()),
+      );
     }
 
+    // Show discovery content when search is empty
     if (_searchController.text.isEmpty) {
-      return _buildEmptyState(
-        colorScheme,
-        'assets/icons/magnifying-glass.svg',
-        'Suche starten',
-        'Gib mindestens 2 Zeichen ein',
-      );
+      return _buildDiscoveryContentScrollable(colorScheme, topPadding);
     }
 
     if (_searchController.text.length < 2) {
-      return _buildEmptyState(
-        colorScheme,
-        'assets/icons/magnifying-glass.svg',
-        'Weiter tippen...',
-        'Gib mindestens 2 Zeichen ein',
-      );
+      return _buildDiscoveryContentScrollable(colorScheme, topPadding);
     }
 
     if (_results.isEmpty) {
-      return _buildEmptyState(
-        colorScheme,
-        'assets/icons/x.svg',
-        'Keine Ergebnisse',
-        'Versuche einen anderen Suchbegriff',
+      return Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: _buildEmptyState(
+          colorScheme,
+          'assets/icons/x.svg',
+          'Keine Ergebnisse',
+          'Versuche einen anderen Suchbegriff',
+        ),
       );
     }
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 40),
+      padding: EdgeInsets.only(top: topPadding, bottom: 40),
       children: [
         if (_results.movies.isNotEmpty)
           _buildSection(
@@ -314,6 +384,186 @@ class _SearchScreenState extends State<SearchScreen> {
             _buildLiveStreamsList(),
           ),
       ],
+    );
+  }
+
+  Widget _buildDiscoveryContentScrollable(ColorScheme colorScheme, double topPadding) {
+    return ListView(
+      padding: EdgeInsets.only(top: topPadding, bottom: 40),
+      children: [
+        // Quick Search Chips
+        _buildQuickSearchSection(colorScheme),
+
+        // Suggested Movies
+        if (_suggestedMovies.isNotEmpty)
+          _buildDiscoverySection(
+            colorScheme,
+            'Entdecke Filme',
+            'assets/icons/film-strip.svg',
+            _buildSuggestedMovies(),
+          ),
+
+        // Suggested Series
+        if (_suggestedSeries.isNotEmpty)
+          _buildDiscoverySection(
+            colorScheme,
+            'Entdecke Serien',
+            'assets/icons/monitor-play.svg',
+            _buildSuggestedSeries(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildQuickSearchSection(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SvgPicture.asset(
+                'assets/icons/sparkle.svg',
+                width: 18,
+                height: 18,
+                colorFilter: ColorFilter.mode(
+                  colorScheme.primary,
+                  BlendMode.srcIn,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Schnellsuche',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _quickSearchTerms.map((term) {
+              return GestureDetector(
+                onTap: () {
+                  _searchController.text = term;
+                  _onSearchChanged(term);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        colorScheme.primary.withAlpha(20),
+                        colorScheme.secondary.withAlpha(15),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: colorScheme.primary.withAlpha(40),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    term,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiscoverySection(
+    ColorScheme colorScheme,
+    String title,
+    String icon,
+    Widget content,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Row(
+            children: [
+              SvgPicture.asset(
+                icon,
+                width: 18,
+                height: 18,
+                colorFilter: ColorFilter.mode(
+                  colorScheme.onSurface.withAlpha(150),
+                  BlendMode.srcIn,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+        content,
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildSuggestedMovies() {
+    return SizedBox(
+      height: 200,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _suggestedMovies.length,
+        itemBuilder: (context, index) {
+          final movie = _suggestedMovies[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _SearchMovieCard(
+              movie: movie,
+              onTap: () => _playMovie(movie),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSuggestedSeries() {
+    return SizedBox(
+      height: 200,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _suggestedSeries.length,
+        itemBuilder: (context, index) {
+          final series = _suggestedSeries[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _SearchSeriesCard(
+              series: series,
+              onTap: () => _openSeries(series),
+            ),
+          );
+        },
+      ),
     );
   }
 

@@ -48,158 +48,194 @@ class HeroBanner extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
+    final bgColor = isDark ? const Color(0xFF0F0F0F) : colorScheme.surface;
 
-    return Container(
+    // Stack mit clipBehavior.none damit der untere Überlauf sichtbar ist
+    return SizedBox(
       height: 420,
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black : colorScheme.surface,
-      ),
       child: Stack(
-        fit: StackFit.expand,
+        clipBehavior: Clip.none,
         children: [
-          // Hintergrundbild
-          if (imageUrl != null && imageUrl!.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: imageUrl!,
-              fit: BoxFit.cover,
-              placeholder: (context, url) => _buildPlaceholder(context),
-              errorWidget: (context, url, error) => _buildPlaceholder(context),
-            )
-          else
-            _buildPlaceholder(context),
-
-          // Gradient-Overlay von unten
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withAlpha(25),
-                  Colors.black.withAlpha(100),
-                  Colors.black.withAlpha(200),
-                  isDark ? const Color(0xFF0F0F0F) : colorScheme.surface,
-                ],
-                stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
+          // Hauptcontainer mit Banner
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black : colorScheme.surface,
               ),
-            ),
-          ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Hintergrundbild
+                  if (imageUrl != null && imageUrl!.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: imageUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => _buildPlaceholder(context),
+                      errorWidget: (context, url, error) => _buildPlaceholder(context),
+                    )
+                  else
+                    _buildPlaceholder(context),
 
-          // Seitlicher Gradient (für Tiefe)
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.black.withAlpha(100),
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.black.withAlpha(50),
-                ],
-                stops: const [0.0, 0.2, 0.8, 1.0],
-              ),
-            ),
-          ),
-
-          // Content-Bereich
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 30,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Subtile Top-Zeile mit Kategorie-Icon und Text
-                Row(
-                  children: [
-                    Icon(
-                      _getCategoryIcon(category),
-                      color: Colors.white.withAlpha(200),
-                      size: 16,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _getCategoryLabel(category),
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withAlpha(200),
-                        letterSpacing: 0.5,
+                  // Gradient-Overlay von unten (sanfter Übergang)
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withAlpha(15),
+                          Colors.black.withAlpha(50),
+                          Colors.black.withAlpha(120),
+                          Colors.black.withAlpha(180),
+                          Colors.black.withAlpha(220),
+                          bgColor,
+                          bgColor,
+                        ],
+                        stops: const [0.0, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.92, 1.0],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(100),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Highlight des Tages',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.primary.withAlpha(230),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                // Titel
-                Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    fontSize: screenWidth > 600 ? 36 : 28,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    height: 1.1,
-                    shadows: [
-                      Shadow(
-                        blurRadius: 20,
-                        color: Colors.black.withAlpha(180),
-                      ),
-                    ],
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
 
-                const SizedBox(height: 10),
-
-                // Subtile Info-Zeile (Qualität + Sprache als Text)
-                Row(
-                  children: [
-                    if (quality != null) ...[
-                      _QualityChip(quality: quality!),
-                      const SizedBox(width: 12),
-                    ],
-                    if (language != null)
-                      Text(
-                        ContentParser.languageCodes[language] ?? language!,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withAlpha(180),
-                        ),
+                  // Seitlicher Gradient (für Tiefe)
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.black.withAlpha(100),
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withAlpha(50),
+                        ],
+                        stops: const [0.0, 0.2, 0.8, 1.0],
                       ),
+                    ),
+                  ),
+
+                  // Content-Bereich
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 30,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Subtile Top-Zeile mit Kategorie-Icon und Text
+                        Row(
+                          children: [
+                            Icon(
+                              _getCategoryIcon(category),
+                              color: Colors.white.withAlpha(200),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _getCategoryLabel(category),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withAlpha(200),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(100),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Highlight des Tages',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.primary.withAlpha(230),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Titel
+                        Text(
+                          title,
+                          style: GoogleFonts.poppins(
+                            fontSize: screenWidth > 600 ? 36 : 28,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.1,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 20,
+                                color: Colors.black.withAlpha(180),
+                              ),
+                            ],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Subtile Info-Zeile (Qualität + Sprache als Text)
+                        Row(
+                          children: [
+                            if (quality != null) ...[
+                              _QualityChip(quality: quality!),
+                              const SizedBox(width: 12),
+                            ],
+                            if (language != null)
+                              Text(
+                                ContentParser.languageCodes[language] ?? language!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white.withAlpha(180),
+                                ),
+                              ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Play Button
+                        _PlayButton(onPressed: onPlay),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Überlauf nach unten - überdeckt die Kante
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: -20,
+            height: 40,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    bgColor,
+                    bgColor,
                   ],
                 ),
-
-                const SizedBox(height: 20),
-
-                // Play Button
-                _PlayButton(onPressed: onPlay),
-              ],
+              ),
             ),
           ),
         ],

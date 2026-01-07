@@ -109,7 +109,20 @@ class _MainNavigationState extends State<MainNavigation>
     HapticFeedback.lightImpact();
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SearchScreen()),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const SearchScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          final tween = Tween(begin: begin, end: end)
+              .chain(CurveTween(curve: Curves.easeOutCubic));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+      ),
     );
   }
 
@@ -142,11 +155,26 @@ class _MainNavigationState extends State<MainNavigation>
       top: 0,
       left: 0,
       right: 0,
-      child: SafeArea(
-        bottom: false,
-        child: Container(
-          padding: EdgeInsets.fromLTRB(32, 20 + extraTopPadding, 32, 20),
-          child: Row(
+      child: Container(
+        // Dezenter Gradient für bessere Lesbarkeit bei hellen Bildern
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withAlpha(80),
+              Colors.black.withAlpha(40),
+              Colors.black.withAlpha(15),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.4, 0.7, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Container(
+            padding: EdgeInsets.fromLTRB(32, 20 + extraTopPadding, 32, 20),
+            child: Row(
             children: [
               // "Willkommen zurück" + Untertitel links (nur auf Start-Screen)
               if (isStartScreen)
@@ -303,6 +331,7 @@ class _MainNavigationState extends State<MainNavigation>
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

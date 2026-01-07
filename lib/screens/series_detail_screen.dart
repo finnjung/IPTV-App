@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -90,45 +92,30 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final favoriteId = 'series_${widget.series.seriesId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
+    // Extra top padding für macOS Titelleiste
+    final isMacOS = !kIsWeb && Platform.isMacOS;
+    final macOSTopPadding = isMacOS ? 28.0 : 0.0;
+
+    // Gleiche Hintergrundfarbe wie im HeroBanner/StartScreen
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0F0F0F) : colorScheme.surface;
+
     return Scaffold(
+      backgroundColor: bgColor,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : CustomScrollView(
               slivers: [
-                // Header with cover image
+                // Header with cover image und Titel auf dem Gradient
                 SliverAppBar(
-                  expandedHeight: 300,
+                  expandedHeight: 380 + macOSTopPadding,
                   pinned: true,
-                  backgroundColor: colorScheme.surface,
-                  leading: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(100),
-                        shape: BoxShape.circle,
-                      ),
-                      child: SvgPicture.asset(
-                        'assets/icons/caret-left.svg',
-                        width: 20,
-                        height: 20,
-                        colorFilter: const ColorFilter.mode(
-                          Colors.white,
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                    ),
-                  ),
-                  actions: [
-                    IconButton(
-                      onPressed: () {
-                        final favorite = Favorite.fromSeries(
-                          seriesId: widget.series.seriesId ?? 0,
-                          title: widget.series.name ?? '',
-                          imageUrl: widget.series.cover,
-                        );
-                        xtreamService.toggleFavorite(favorite);
-                      },
+                  backgroundColor: bgColor,
+                  toolbarHeight: kToolbarHeight + macOSTopPadding,
+                  leading: Padding(
+                    padding: EdgeInsets.only(top: macOSTopPadding),
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
                       icon: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -136,12 +123,43 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: SvgPicture.asset(
-                          isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                          'assets/icons/caret-left.svg',
                           width: 20,
                           height: 20,
                           colorFilter: const ColorFilter.mode(
                             Colors.white,
                             BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    Padding(
+                      padding: EdgeInsets.only(top: macOSTopPadding),
+                      child: IconButton(
+                        onPressed: () {
+                          final favorite = Favorite.fromSeries(
+                            seriesId: widget.series.seriesId ?? 0,
+                            title: widget.series.name ?? '',
+                            imageUrl: widget.series.cover,
+                          );
+                          xtreamService.toggleFavorite(favorite);
+                        },
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withAlpha(100),
+                            shape: BoxShape.circle,
+                          ),
+                          child: SvgPicture.asset(
+                            isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                            width: 20,
+                            height: 20,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
                           ),
                         ),
                       ),
@@ -152,14 +170,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                     background: Stack(
                       fit: StackFit.expand,
                       children: [
+                        // Cover-Bild
                         if (widget.series.cover != null)
                           CachedNetworkImage(
                             imageUrl: widget.series.cover!,
                             fit: BoxFit.cover,
                             errorWidget: (_, __, ___) => Container(
-                              color: colorScheme.surface,
+                              color: bgColor,
                             ),
                           ),
+                        // Gradient mit 100% Deckung am Ende
                         Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -167,69 +187,105 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                colorScheme.surface,
+                                Colors.transparent,
+                                bgColor.withAlpha(20),
+                                bgColor.withAlpha(80),
+                                bgColor.withAlpha(160),
+                                bgColor.withAlpha(220),
+                                bgColor,
+                                bgColor,
                               ],
-                              stops: const [0.5, 1.0],
+                              stops: const [0.0, 0.2, 0.35, 0.45, 0.55, 0.65, 0.78, 1.0],
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Series Info
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          ContentParser.parse(widget.series.name ?? 'Unbekannt').cleanName,
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface,
+                        // Seitlicher Gradient für Tiefe
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.black.withAlpha(60),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.black.withAlpha(30),
+                              ],
+                              stops: const [0.0, 0.25, 0.75, 1.0],
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            if (_seriesInfo?.info.releaseDate != null) ...[
+                        // Titel und Infos auf dem Gradient
+                        Positioned(
+                          left: 20,
+                          right: 20,
+                          bottom: 20,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Titel
                               Text(
-                                _formatDate(_seriesInfo!.info.releaseDate!),
+                                ContentParser.parse(widget.series.name ?? 'Unbekannt').cleanName,
                                 style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurface.withAlpha(150),
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  color: colorScheme.onSurface,
+                                  height: 1.1,
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 16),
+                              const SizedBox(height: 10),
+                              // Meta-Infos
+                              Row(
+                                children: [
+                                  if (_seriesInfo?.info.releaseDate != null) ...[
+                                    Text(
+                                      _formatDate(_seriesInfo!.info.releaseDate!),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: colorScheme.onSurface.withAlpha(180),
+                                      ),
+                                    ),
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.onSurface.withAlpha(100),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ],
+                                  if (_seriesInfo?.seasons != null)
+                                    Text(
+                                      '${_seriesInfo!.seasons!.length} Staffeln',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: colorScheme.onSurface.withAlpha(180),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              // Plot/Beschreibung
+                              if (_seriesInfo?.info.plot != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _seriesInfo!.info.plot!,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: colorScheme.onSurface.withAlpha(160),
+                                    height: 1.4,
+                                  ),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ],
-                            if (_seriesInfo?.seasons != null)
-                              Text(
-                                '${_seriesInfo!.seasons!.length} Staffeln',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                          ],
-                        ),
-                        if (_seriesInfo?.info.plot != null) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            _seriesInfo!.info.plot!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: colorScheme.onSurface.withAlpha(180),
-                              height: 1.5,
-                            ),
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
@@ -590,60 +646,76 @@ class _SeriesDetailScreenFromFavoriteState
     final favoriteId = 'series_${widget.seriesId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
+    // Extra top padding für macOS Titelleiste
+    final isMacOS = !kIsWeb && Platform.isMacOS;
+    final macOSTopPadding = isMacOS ? 28.0 : 0.0;
+
+    // Gleiche Hintergrundfarbe wie im HeroBanner/StartScreen
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0F0F0F) : colorScheme.surface;
+
     return Scaffold(
+      backgroundColor: bgColor,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : CustomScrollView(
               slivers: [
-                // Header with cover image
+                // Header with cover image und Titel auf dem Gradient
                 SliverAppBar(
-                  expandedHeight: 300,
+                  expandedHeight: 380 + macOSTopPadding,
                   pinned: true,
-                  backgroundColor: colorScheme.surface,
-                  leading: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(100),
-                        shape: BoxShape.circle,
-                      ),
-                      child: SvgPicture.asset(
-                        'assets/icons/caret-left.svg',
-                        width: 20,
-                        height: 20,
-                        colorFilter: const ColorFilter.mode(
-                          Colors.white,
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                    ),
-                  ),
-                  actions: [
-                    IconButton(
-                      onPressed: () {
-                        final favorite = Favorite.fromSeries(
-                          seriesId: widget.seriesId,
-                          title: widget.seriesName,
-                          imageUrl: widget.seriesCover,
-                        );
-                        xtreamService.toggleFavorite(favorite);
-                      },
+                  backgroundColor: bgColor,
+                  toolbarHeight: kToolbarHeight + macOSTopPadding,
+                  leading: Padding(
+                    padding: EdgeInsets.only(top: macOSTopPadding),
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
                       icon: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: isFavorite
-                              ? Colors.red.withAlpha(200)
-                              : Colors.black.withAlpha(100),
+                          color: Colors.black.withAlpha(100),
                           shape: BoxShape.circle,
                         ),
                         child: SvgPicture.asset(
-                          'assets/icons/heart.svg',
+                          'assets/icons/caret-left.svg',
                           width: 20,
                           height: 20,
                           colorFilter: const ColorFilter.mode(
                             Colors.white,
                             BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    Padding(
+                      padding: EdgeInsets.only(top: macOSTopPadding),
+                      child: IconButton(
+                        onPressed: () {
+                          final favorite = Favorite.fromSeries(
+                            seriesId: widget.seriesId,
+                            title: widget.seriesName,
+                            imageUrl: widget.seriesCover,
+                          );
+                          xtreamService.toggleFavorite(favorite);
+                        },
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isFavorite
+                                ? Colors.red.withAlpha(200)
+                                : Colors.black.withAlpha(100),
+                            shape: BoxShape.circle,
+                          ),
+                          child: SvgPicture.asset(
+                            isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                            width: 20,
+                            height: 20,
+                            colorFilter: const ColorFilter.mode(
+                              Colors.white,
+                              BlendMode.srcIn,
+                            ),
                           ),
                         ),
                       ),
@@ -654,14 +726,16 @@ class _SeriesDetailScreenFromFavoriteState
                     background: Stack(
                       fit: StackFit.expand,
                       children: [
+                        // Cover-Bild
                         if (widget.seriesCover != null)
                           CachedNetworkImage(
                             imageUrl: widget.seriesCover!,
                             fit: BoxFit.cover,
                             errorWidget: (_, __, ___) => Container(
-                              color: colorScheme.surface,
+                              color: bgColor,
                             ),
                           ),
+                        // Gradient mit 100% Deckung am Ende
                         Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -669,69 +743,105 @@ class _SeriesDetailScreenFromFavoriteState
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                colorScheme.surface,
+                                Colors.transparent,
+                                bgColor.withAlpha(20),
+                                bgColor.withAlpha(80),
+                                bgColor.withAlpha(160),
+                                bgColor.withAlpha(220),
+                                bgColor,
+                                bgColor,
                               ],
-                              stops: const [0.5, 1.0],
+                              stops: const [0.0, 0.2, 0.35, 0.45, 0.55, 0.65, 0.78, 1.0],
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Series Info
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          ContentParser.parse(widget.seriesName).cleanName,
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface,
+                        // Seitlicher Gradient für Tiefe
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.black.withAlpha(60),
+                                Colors.transparent,
+                                Colors.transparent,
+                                Colors.black.withAlpha(30),
+                              ],
+                              stops: const [0.0, 0.25, 0.75, 1.0],
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            if (_seriesInfo?.info.releaseDate != null) ...[
+                        // Titel und Infos auf dem Gradient
+                        Positioned(
+                          left: 20,
+                          right: 20,
+                          bottom: 20,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Titel
                               Text(
-                                _formatDate(_seriesInfo!.info.releaseDate!),
+                                ContentParser.parse(widget.seriesName).cleanName,
                                 style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurface.withAlpha(150),
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  color: colorScheme.onSurface,
+                                  height: 1.1,
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 16),
+                              const SizedBox(height: 10),
+                              // Meta-Infos
+                              Row(
+                                children: [
+                                  if (_seriesInfo?.info.releaseDate != null) ...[
+                                    Text(
+                                      _formatDate(_seriesInfo!.info.releaseDate!),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: colorScheme.onSurface.withAlpha(180),
+                                      ),
+                                    ),
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 10),
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.onSurface.withAlpha(100),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ],
+                                  if (_seriesInfo?.seasons != null)
+                                    Text(
+                                      '${_seriesInfo!.seasons!.length} Staffeln',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: colorScheme.onSurface.withAlpha(180),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              // Plot/Beschreibung
+                              if (_seriesInfo?.info.plot != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _seriesInfo!.info.plot!,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: colorScheme.onSurface.withAlpha(160),
+                                    height: 1.4,
+                                  ),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ],
-                            if (_seriesInfo?.seasons != null)
-                              Text(
-                                '${_seriesInfo!.seasons!.length} Staffeln',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                          ],
-                        ),
-                        if (_seriesInfo?.info.plot != null) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            _seriesInfo!.info.plot!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: colorScheme.onSurface.withAlpha(180),
-                              height: 1.5,
-                            ),
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),

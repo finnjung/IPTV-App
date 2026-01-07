@@ -39,11 +39,6 @@ class _StartScreenState extends State<StartScreen> {
     }
   }
 
-  Future<void> _refreshContent() async {
-    final xtreamService = context.read<XtreamService>();
-    await xtreamService.loadStartScreenContent(forceRefresh: true);
-  }
-
   bool _isDesktopPlatform() {
     if (kIsWeb) return true;
     return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
@@ -66,11 +61,8 @@ class _StartScreenState extends State<StartScreen> {
     final isDesktop = _useDesktopLayout(context);
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _refreshContent,
-        edgeOffset: 120,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+      body: CustomScrollView(
+          physics: const ClampingScrollPhysics(),
           slivers: [
             // Hero Banner (wenn Spotlight verfügbar)
             if (content?.spotlight != null)
@@ -84,7 +76,11 @@ class _StartScreenState extends State<StartScreen> {
               // Desktop ohne Spotlight: Nur Padding für das Overlay
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
 
-            // Continue Watching Section (always show if available)
+            // "Das gefällt dir bestimmt" Section - ganz oben nach Banner
+            if (content != null)
+              ..._buildCuratedPopularSectionOnly(content),
+
+            // Continue Watching Section
               if (continueWatching.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
@@ -164,7 +160,6 @@ class _StartScreenState extends State<StartScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
-        ),
     );
   }
 
@@ -261,17 +256,8 @@ class _StartScreenState extends State<StartScreen> {
       switch (section) {
         case StartScreenSection.continueWatching:
         case StartScreenSection.favorites:
-          // Diese werden separat oben gehandhabt
-          break;
-
         case StartScreenSection.curatedPopular:
-          // Kuratierte beliebte Inhalte (Filme + Serien gemischt)
-          if (content.curatedMovies.isNotEmpty || content.curatedSeries.isNotEmpty) {
-            sections.addAll(_buildCuratedPopularSection(content));
-          } else if (content.popularMovies.isNotEmpty || content.popularSeries.isNotEmpty) {
-            // Fallback auf Provider-Tags
-            sections.addAll(_buildFallbackPopularSection(content));
-          }
+          // Diese werden separat oben gehandhabt (curatedPopular ganz oben nach Banner)
           break;
 
         case StartScreenSection.curatedKids:
@@ -307,6 +293,16 @@ class _StartScreenState extends State<StartScreen> {
     }
 
     return sections;
+  }
+
+  /// Baut nur die "Das gefällt dir bestimmt" Section (wird ganz oben angezeigt)
+  List<Widget> _buildCuratedPopularSectionOnly(StartScreenContent content) {
+    if (content.curatedMovies.isNotEmpty || content.curatedSeries.isNotEmpty) {
+      return _buildCuratedPopularSection(content);
+    } else if (content.popularMovies.isNotEmpty || content.popularSeries.isNotEmpty) {
+      return _buildFallbackPopularSection(content);
+    }
+    return [];
   }
 
   List<Widget> _buildCuratedPopularSection(StartScreenContent content) {

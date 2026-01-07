@@ -1209,8 +1209,12 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     final isFavorite = favoriteId != null && xtreamService.isFavorite(favoriteId);
 
+    // Extra top padding für macOS Titelleiste (Window-Buttons)
+    final isMacOS = !kIsWeb && Platform.isMacOS;
+    final topPadding = isMacOS ? 28.0 : 16.0;
+
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
       child: Row(
         children: [
           IconButton(
