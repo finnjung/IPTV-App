@@ -9,10 +9,9 @@ import '../widgets/content_card.dart';
 import '../widgets/sticky_glass_header.dart';
 import '../widgets/section_header.dart';
 import '../widgets/responsive_grid.dart';
-import '../models/watch_progress.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
-import 'player_screen.dart';
+import 'movie_detail_screen.dart';
 
 class MoviesScreen extends StatefulWidget {
   const MoviesScreen({super.key});
@@ -37,29 +36,13 @@ class _MoviesScreenState extends State<MoviesScreen> {
     }
   }
 
-  void _playMovie(XTremeCodeVodItem movie) {
-    final xtreamService = context.read<XtreamService>();
-    final url = xtreamService.getMovieUrl(
-      movie.streamId ?? 0,
-      container: movie.containerExtension ?? 'mp4',
+  void _showMovieDetail(XTremeCodeVodItem movie) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MovieDetailScreen(movie: movie),
+      ),
     );
-
-    if (url != null) {
-      final metadata = ContentParser.parse(movie.name ?? 'Film');
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PlayerScreen(
-            title: metadata.cleanName,
-            subtitle: movie.year,
-            streamUrl: url,
-            contentId: 'movie_${movie.streamId}',
-            imageUrl: movie.streamIcon,
-            contentType: ContentType.movie,
-          ),
-        ),
-      );
-    }
   }
 
   @override
@@ -125,7 +108,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                               ),
                               child: _MovieCard(
                                 movie: movie,
-                                onTap: () => _playMovie(movie),
+                                onTap: () => _showMovieDetail(movie),
                               ),
                             );
                           },
@@ -163,7 +146,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                           subtitle: movie.year,
                           imageUrl: movie.streamIcon,
                           icon: 'assets/icons/film-strip.svg',
-                          onTap: () => _playMovie(movie),
+                          onTap: () => _showMovieDetail(movie),
                         );
                       },
                     ),

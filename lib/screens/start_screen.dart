@@ -14,6 +14,7 @@ import '../widgets/sticky_glass_header.dart';
 import '../widgets/hero_banner.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
+import 'movie_detail_screen.dart';
 
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key});
@@ -220,21 +221,12 @@ class _StartScreenState extends State<StartScreen> {
       onPlay: () {
         if (spotlight.isMovie) {
           final movie = spotlight.originalItem as XTremeCodeVodItem;
-          final streamUrl = xtreamService.getMovieUrl(movie.streamId ?? 0);
-          if (streamUrl != null) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PlayerScreen(
-                  title: spotlight.name,
-                  streamUrl: streamUrl,
-                  contentId: 'movie_${movie.streamId}',
-                  imageUrl: movie.streamIcon,
-                  contentType: ContentType.movie,
-                ),
-              ),
-            );
-          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MovieDetailScreen(movie: movie),
+            ),
+          );
         } else {
           final series = spotlight.originalItem as XTremeCodeSeriesItem;
           Navigator.push(
@@ -593,26 +585,16 @@ class _MovieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final xtreamService = context.read<XtreamService>();
     final metadata = ContentParser.parse(movie.name ?? '');
 
     return GestureDetector(
       onTap: () {
-        final streamUrl = xtreamService.getMovieUrl(movie.streamId ?? 0);
-        if (streamUrl != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => PlayerScreen(
-                title: metadata.cleanName,
-                streamUrl: streamUrl,
-                contentId: 'movie_${movie.streamId}',
-                imageUrl: movie.streamIcon,
-                contentType: ContentType.movie,
-              ),
-            ),
-          );
-        }
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MovieDetailScreen(movie: movie),
+          ),
+        );
       },
       child: Container(
         width: 130,
@@ -1358,20 +1340,16 @@ class _FavoriteCard extends StatelessWidget {
   void _navigateToContent(BuildContext context, XtreamService xtreamService) {
     switch (favorite.contentType) {
       case ContentType.movie:
-        final streamUrl = xtreamService.getMovieUrl(
-          favorite.streamId ?? 0,
-          container: favorite.extension ?? 'mp4',
-        );
-        if (streamUrl != null) {
+        // Navigate to movie detail screen using MovieDetailScreenFromFavorite
+        if (favorite.streamId != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => PlayerScreen(
-                title: ContentParser.parse(favorite.title).cleanName,
-                streamUrl: streamUrl,
-                contentId: favorite.id,
-                imageUrl: favorite.imageUrl,
-                contentType: ContentType.movie,
+              builder: (context) => MovieDetailScreenFromFavorite(
+                streamId: favorite.streamId!,
+                movieTitle: favorite.title,
+                moviePoster: favorite.imageUrl,
+                containerExtension: favorite.extension,
               ),
             ),
           );

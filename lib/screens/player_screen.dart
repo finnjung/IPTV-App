@@ -944,26 +944,24 @@ class _PlayerScreenState extends State<PlayerScreen>
               ),
             ),
 
-          // Loading indicator
-          if (_isLoading)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(
+          // Loading indicator mit animierter Abdunkelung
+          IgnorePointer(
+            ignoring: !_isLoading,
+            child: AnimatedOpacity(
+              opacity: _isLoading ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: Container(
+                color: Colors.black.withAlpha(120),
+                child: const Center(
+                  child: CircularProgressIndicator(
                     color: Colors.white,
+                    strokeWidth: 3,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Lädt...',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
+          ),
 
           // Großer Titel bei Pause (nach 3 Sekunden mit Fade-In und Abdunkelung)
           if (_showPauseTitle && _isPaused && !_isLoading && _error == null)

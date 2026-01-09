@@ -7,10 +7,17 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
+import '../services/download_service.dart';
 import '../models/watch_progress.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
+import '../widgets/episode_download_button.dart';
 import 'player_screen.dart';
+
+// Hilfsfunktion für Episode Content ID
+String _getEpisodeContentId(int seriesId, int seasonNum, int episodeNum) {
+  return 'series_${seriesId}_${seasonNum}_$episodeNum';
+}
 
 class SeriesDetailScreen extends StatefulWidget {
   final XTremeCodeSeriesItem series;
@@ -60,14 +67,28 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return '${date.day}.${date.month}.${date.year}';
   }
 
-  void _playEpisode(XTremeCodeEpisode episode, int seasonNum) {
+  void _playEpisode(XTremeCodeEpisode episode, int seasonNum, {bool resume = true}) {
     final xtreamService = context.read<XtreamService>();
-    final url = xtreamService.getSeriesEpisodeUrl(
+    final downloadService = context.read<DownloadService>();
+    final contentId = _getEpisodeContentId(
+      widget.series.seriesId ?? 0,
+      seasonNum,
+      episode.episodeNum ?? 1,
+    );
+
+    // Prüfe ob offline verfügbar
+    final localPath = downloadService.getLocalPath(contentId);
+    final url = localPath ?? xtreamService.getSeriesEpisodeUrl(
       episode.id ?? 0,
       container: episode.containerExtension ?? 'mp4',
     );
 
     if (url != null) {
+      // Wenn nicht fortsetzen, Progress löschen
+      if (!resume) {
+        xtreamService.removeWatchProgress(contentId);
+      }
+
       final metadata = ContentParser.parse(widget.series.name ?? 'Serie');
       Navigator.push(
         context,
@@ -76,13 +97,292 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
             title: metadata.cleanName,
             subtitle: 'S$seasonNum E${episode.episodeNum ?? 1}: ${episode.title ?? "Episode"}',
             streamUrl: url,
-            contentId: 'series_${widget.series.seriesId}_${seasonNum}_${episode.episodeNum ?? 1}',
+            contentId: contentId,
             imageUrl: episode.info.movieImage ?? widget.series.cover,
             contentType: ContentType.series,
           ),
         ),
       );
     }
+  }
+
+  /// Findet die letzte angeschaute Episode dieser Serie
+  (XTremeCodeEpisode?, int?, WatchProgress?)? _findLastWatchedEpisode(XtreamService xtreamService) {
+    if (_seriesInfo?.episodes == null || _seriesInfo?.seasons == null) {
+      return null;
+    }
+
+    WatchProgress? latestProgress;
+    XTremeCodeEpisode? latestEpisode;
+    int? latestSeasonNum;
+
+    for (final season in _seriesInfo!.seasons!) {
+      final seasonNum = season.seasonNumber ?? 1;
+      final episodes = _seriesInfo!.episodes?[seasonNum.toString()] ?? [];
+
+      for (final episode in episodes) {
+        final contentId = _getEpisodeContentId(
+          widget.series.seriesId ?? 0,
+          seasonNum,
+          episode.episodeNum ?? 1,
+        );
+        final progress = xtreamService.getWatchProgress(contentId);
+
+        if (progress != null && progress.position.inSeconds > 30) {
+          if (latestProgress == null || progress.lastWatched.isAfter(latestProgress.lastWatched)) {
+            latestProgress = progress;
+            latestEpisode = episode;
+            latestSeasonNum = seasonNum;
+          }
+        }
+      }
+    }
+
+    if (latestEpisode != null && latestSeasonNum != null && latestProgress != null) {
+      return (latestEpisode, latestSeasonNum, latestProgress);
+    }
+    return null;
+  }
+
+  Widget _buildContinueWatchingSection(ColorScheme colorScheme, XtreamService xtreamService) {
+    final lastWatched = _findLastWatchedEpisode(xtreamService);
+    if (lastWatched == null) return const SizedBox.shrink();
+
+    final (episode, seasonNum, progress) = lastWatched;
+    if (episode == null || seasonNum == null || progress == null) return const SizedBox.shrink();
+
+    // Progress berechnen
+    final progressPercent = progress.duration.inSeconds > 0
+        ? (progress.position.inSeconds / progress.duration.inSeconds).clamp(0.0, 1.0)
+        : 0.0;
+    final remainingMinutes = ((progress.duration.inSeconds - progress.position.inSeconds) / 60).round();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: colorScheme.primary.withAlpha(50),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withAlpha(30),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/clock.svg',
+                      width: 16,
+                      height: 16,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.primary,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Weiterschauen',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Episode Info
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  // Thumbnail mit Play Overlay
+                  GestureDetector(
+                    onTap: () => _playEpisode(episode, seasonNum, resume: true),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 140,
+                            height: 80,
+                            color: colorScheme.onSurface.withAlpha(10),
+                            child: episode.info.movieImage != null
+                                ? CachedNetworkImage(
+                                    imageUrl: episode.info.movieImage!,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => _buildEpisodePlaceholder(colorScheme),
+                                  )
+                                : _buildEpisodePlaceholder(colorScheme),
+                          ),
+                          // Play Overlay
+                          Positioned.fill(
+                            child: Container(
+                              color: Colors.black.withAlpha(80),
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: SvgPicture.asset(
+                                    'assets/icons/play.svg',
+                                    width: 20,
+                                    height: 20,
+                                    colorFilter: const ColorFilter.mode(
+                                      Colors.white,
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Progress Bar
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(50),
+                              ),
+                              child: FractionallySizedBox(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: progressPercent,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  // Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'S$seasonNum E${episode.episodeNum ?? 1}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          episode.title ?? 'Episode ${episode.episodeNum ?? 1}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          remainingMinutes > 0
+                              ? 'Noch $remainingMinutes Min.'
+                              : 'Fast fertig',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Row(
+                children: [
+                  // Continue Button
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _playEpisode(episode, seasonNum, resume: true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: SvgPicture.asset(
+                        'assets/icons/play.svg',
+                        width: 16,
+                        height: 16,
+                        colorFilter: const ColorFilter.mode(
+                          Colors.white,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      label: Text(
+                        'Fortsetzen',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Restart Button
+                  OutlinedButton(
+                    onPressed: () => _playEpisode(episode, seasonNum, resume: false),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      side: BorderSide(
+                        color: colorScheme.outline.withAlpha(80),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/arrow-counter-clockwise.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -291,6 +591,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ),
                 ),
 
+                // Continue Watching Section (wenn vorhanden)
+                if (!_isLoading && _seriesInfo != null)
+                  SliverToBoxAdapter(
+                    child: _buildContinueWatchingSection(colorScheme, xtreamService),
+                  ),
+
                 // Season Tabs
                 if (_seriesInfo?.seasons != null &&
                     _seriesInfo!.seasons!.isNotEmpty)
@@ -345,7 +651,29 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                     ),
                   ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                // Season Download Button
+                if (_seriesInfo?.episodes != null &&
+                    _seriesInfo?.seasons != null &&
+                    _seriesInfo!.seasons!.isNotEmpty &&
+                    _selectedSeason < _seriesInfo!.seasons!.length)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SeasonDownloadButton(
+                        seriesId: widget.series.seriesId ?? 0,
+                        seriesName: widget.series.name ?? 'Serie',
+                        seriesCover: widget.series.cover,
+                        seasonNumber: _seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1,
+                        episodes: _seriesInfo!.episodes?[
+                            (_seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1).toString()
+                        ] ?? [],
+                      ),
+                    ),
+                  ),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                 // Episodes
                 if (_seriesInfo?.episodes != null &&
@@ -410,6 +738,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
     final seasonNumber = _seriesInfo!.seasons![_selectedSeason].seasonNumber;
     final episodes = _seriesInfo!.episodes?[seasonNumber.toString()] ?? [];
+    final xtreamService = context.watch<XtreamService>();
 
     if (episodes.isEmpty) {
       return SliverToBoxAdapter(
@@ -433,13 +762,26 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final episode = episodes[index];
+            final contentId = _getEpisodeContentId(
+              widget.series.seriesId ?? 0,
+              seasonNumber ?? 1,
+              episode.episodeNum ?? 1,
+            );
+            final progress = xtreamService.getWatchProgress(contentId);
+            final hasProgress = progress != null && progress.position.inSeconds > 30;
+            final progressPercent = hasProgress && progress.duration.inSeconds > 0
+                ? (progress.position.inSeconds / progress.duration.inSeconds).clamp(0.0, 1.0)
+                : 0.0;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: colorScheme.outline.withAlpha(25),
+                  color: hasProgress
+                      ? colorScheme.primary.withAlpha(60)
+                      : colorScheme.outline.withAlpha(25),
                 ),
               ),
               child: Material(
@@ -451,21 +793,43 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
-                        // Episode Thumbnail
+                        // Episode Thumbnail with progress bar
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: 120,
-                            height: 70,
-                            color: colorScheme.surface,
-                            child: episode.info.movieImage != null
-                                ? CachedNetworkImage(
-                                    imageUrl: episode.info.movieImage!,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        _buildEpisodePlaceholder(colorScheme),
-                                  )
-                                : _buildEpisodePlaceholder(colorScheme),
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 120,
+                                height: 70,
+                                color: colorScheme.surface,
+                                child: episode.info.movieImage != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: episode.info.movieImage!,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) =>
+                                            _buildEpisodePlaceholder(colorScheme),
+                                      )
+                                    : _buildEpisodePlaceholder(colorScheme),
+                              ),
+                              // Progress bar overlay
+                              if (hasProgress)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    height: 3,
+                                    color: Colors.black.withAlpha(100),
+                                    child: FractionallySizedBox(
+                                      alignment: Alignment.centerLeft,
+                                      widthFactor: progressPercent,
+                                      child: Container(
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -474,13 +838,37 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Episode ${episode.episodeNum ?? (index + 1)}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Episode ${episode.episodeNum ?? (index + 1)}',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: hasProgress
+                                          ? colorScheme.primary
+                                          : colorScheme.onSurface.withAlpha(150),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (hasProgress) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary.withAlpha(30),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${(progressPercent * 100).round()}%',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          color: colorScheme.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -507,11 +895,22 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             ],
                           ),
                         ),
-                        // Play Button
+                        // Download Button
+                        EpisodeDownloadButton(
+                          seriesId: widget.series.seriesId ?? 0,
+                          seriesName: widget.series.name ?? 'Serie',
+                          seriesCover: widget.series.cover,
+                          episode: episode,
+                          seasonNumber: seasonNumber ?? 1,
+                        ),
+                        const SizedBox(width: 4),
+                        // Play/Resume Button
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: colorScheme.onSurface.withAlpha(15),
+                            color: hasProgress
+                                ? colorScheme.primary.withAlpha(30)
+                                : colorScheme.onSurface.withAlpha(15),
                             shape: BoxShape.circle,
                           ),
                           child: SvgPicture.asset(
@@ -519,7 +918,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             width: 18,
                             height: 18,
                             colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface,
+                              hasProgress ? colorScheme.primary : colorScheme.onSurface,
                               BlendMode.srcIn,
                             ),
                           ),
@@ -612,31 +1011,322 @@ class _SeriesDetailScreenFromFavoriteState
     return '${date.day}.${date.month}.${date.year}';
   }
 
-  void _playEpisode(XTremeCodeEpisode episode, int seasonNum) {
+  void _playEpisode(XTremeCodeEpisode episode, int seasonNum, {bool resume = true}) {
     final xtreamService = context.read<XtreamService>();
-    final url = xtreamService.getSeriesEpisodeUrl(
+    final downloadService = context.read<DownloadService>();
+    final contentId = _getEpisodeContentId(
+      widget.seriesId,
+      seasonNum,
+      episode.episodeNum ?? 1,
+    );
+
+    // Prüfe ob offline verfügbar
+    final localPath = downloadService.getLocalPath(contentId);
+    final url = localPath ?? xtreamService.getSeriesEpisodeUrl(
       episode.id ?? 0,
       container: episode.containerExtension ?? 'mp4',
     );
 
     if (url != null) {
+      // Wenn nicht fortsetzen, Progress löschen
+      if (!resume) {
+        xtreamService.removeWatchProgress(contentId);
+      }
+
       final metadata = ContentParser.parse(widget.seriesName);
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
             title: metadata.cleanName,
-            subtitle:
-                'S$seasonNum E${episode.episodeNum ?? 1}: ${episode.title ?? "Episode"}',
+            subtitle: 'S$seasonNum E${episode.episodeNum ?? 1}: ${episode.title ?? "Episode"}',
             streamUrl: url,
-            contentId:
-                'series_${widget.seriesId}_${seasonNum}_${episode.episodeNum ?? 1}',
+            contentId: contentId,
             imageUrl: episode.info.movieImage ?? widget.seriesCover,
             contentType: ContentType.series,
           ),
         ),
       );
     }
+  }
+
+  /// Findet die letzte angeschaute Episode dieser Serie
+  (XTremeCodeEpisode?, int?, WatchProgress?)? _findLastWatchedEpisode(XtreamService xtreamService) {
+    if (_seriesInfo?.episodes == null || _seriesInfo?.seasons == null) {
+      return null;
+    }
+
+    WatchProgress? latestProgress;
+    XTremeCodeEpisode? latestEpisode;
+    int? latestSeasonNum;
+
+    for (final season in _seriesInfo!.seasons!) {
+      final seasonNum = season.seasonNumber ?? 1;
+      final episodes = _seriesInfo!.episodes?[seasonNum.toString()] ?? [];
+
+      for (final episode in episodes) {
+        final contentId = _getEpisodeContentId(
+          widget.seriesId,
+          seasonNum,
+          episode.episodeNum ?? 1,
+        );
+        final progress = xtreamService.getWatchProgress(contentId);
+
+        if (progress != null && progress.position.inSeconds > 30) {
+          if (latestProgress == null || progress.lastWatched.isAfter(latestProgress.lastWatched)) {
+            latestProgress = progress;
+            latestEpisode = episode;
+            latestSeasonNum = seasonNum;
+          }
+        }
+      }
+    }
+
+    if (latestEpisode != null && latestSeasonNum != null && latestProgress != null) {
+      return (latestEpisode, latestSeasonNum, latestProgress);
+    }
+    return null;
+  }
+
+  Widget _buildContinueWatchingSection(ColorScheme colorScheme, XtreamService xtreamService) {
+    final lastWatched = _findLastWatchedEpisode(xtreamService);
+    if (lastWatched == null) return const SizedBox.shrink();
+
+    final (episode, seasonNum, progress) = lastWatched;
+    if (episode == null || seasonNum == null || progress == null) return const SizedBox.shrink();
+
+    // Progress berechnen
+    final progressPercent = progress.duration.inSeconds > 0
+        ? (progress.position.inSeconds / progress.duration.inSeconds).clamp(0.0, 1.0)
+        : 0.0;
+    final remainingMinutes = ((progress.duration.inSeconds - progress.position.inSeconds) / 60).round();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: colorScheme.primary.withAlpha(50),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withAlpha(30),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/clock.svg',
+                      width: 16,
+                      height: 16,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.primary,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Weiterschauen',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Episode Info
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  // Thumbnail mit Play Overlay
+                  GestureDetector(
+                    onTap: () => _playEpisode(episode, seasonNum, resume: true),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 140,
+                            height: 80,
+                            color: colorScheme.onSurface.withAlpha(10),
+                            child: episode.info.movieImage != null
+                                ? CachedNetworkImage(
+                                    imageUrl: episode.info.movieImage!,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => _buildEpisodePlaceholder(colorScheme),
+                                  )
+                                : _buildEpisodePlaceholder(colorScheme),
+                          ),
+                          // Play Overlay
+                          Positioned.fill(
+                            child: Container(
+                              color: Colors.black.withAlpha(80),
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: SvgPicture.asset(
+                                    'assets/icons/play.svg',
+                                    width: 20,
+                                    height: 20,
+                                    colorFilter: const ColorFilter.mode(
+                                      Colors.white,
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Progress Bar
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withAlpha(50),
+                              ),
+                              child: FractionallySizedBox(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: progressPercent,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  // Info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'S$seasonNum E${episode.episodeNum ?? 1}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          episode.title ?? 'Episode ${episode.episodeNum ?? 1}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          remainingMinutes > 0
+                              ? 'Noch $remainingMinutes Min.'
+                              : 'Fast fertig',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Row(
+                children: [
+                  // Continue Button
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _playEpisode(episode, seasonNum, resume: true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: SvgPicture.asset(
+                        'assets/icons/play.svg',
+                        width: 16,
+                        height: 16,
+                        colorFilter: const ColorFilter.mode(
+                          Colors.white,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                      label: Text(
+                        'Fortsetzen',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Restart Button
+                  OutlinedButton(
+                    onPressed: () => _playEpisode(episode, seasonNum, resume: false),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      side: BorderSide(
+                        color: colorScheme.outline.withAlpha(80),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/arrow-counter-clockwise.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -847,6 +1537,12 @@ class _SeriesDetailScreenFromFavoriteState
                   ),
                 ),
 
+                // Continue Watching Section (wenn vorhanden)
+                if (!_isLoading && _seriesInfo != null)
+                  SliverToBoxAdapter(
+                    child: _buildContinueWatchingSection(colorScheme, xtreamService),
+                  ),
+
                 // Season Tabs
                 if (_seriesInfo?.seasons != null &&
                     _seriesInfo!.seasons!.isNotEmpty)
@@ -901,7 +1597,29 @@ class _SeriesDetailScreenFromFavoriteState
                     ),
                   ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                // Season Download Button
+                if (_seriesInfo?.episodes != null &&
+                    _seriesInfo?.seasons != null &&
+                    _seriesInfo!.seasons!.isNotEmpty &&
+                    _selectedSeason < _seriesInfo!.seasons!.length)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SeasonDownloadButton(
+                        seriesId: widget.seriesId,
+                        seriesName: widget.seriesName,
+                        seriesCover: widget.seriesCover,
+                        seasonNumber: _seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1,
+                        episodes: _seriesInfo!.episodes?[
+                            (_seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1).toString()
+                        ] ?? [],
+                      ),
+                    ),
+                  ),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                 // Episodes
                 if (_seriesInfo?.episodes != null &&
@@ -965,6 +1683,7 @@ class _SeriesDetailScreenFromFavoriteState
 
     final seasonNumber = _seriesInfo!.seasons![_selectedSeason].seasonNumber;
     final episodes = _seriesInfo!.episodes?[seasonNumber.toString()] ?? [];
+    final xtreamService = context.watch<XtreamService>();
 
     if (episodes.isEmpty) {
       return SliverToBoxAdapter(
@@ -988,13 +1707,26 @@ class _SeriesDetailScreenFromFavoriteState
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final episode = episodes[index];
+            final contentId = _getEpisodeContentId(
+              widget.seriesId,
+              seasonNumber ?? 1,
+              episode.episodeNum ?? 1,
+            );
+            final progress = xtreamService.getWatchProgress(contentId);
+            final hasProgress = progress != null && progress.position.inSeconds > 30;
+            final progressPercent = hasProgress && progress.duration.inSeconds > 0
+                ? (progress.position.inSeconds / progress.duration.inSeconds).clamp(0.0, 1.0)
+                : 0.0;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: colorScheme.outline.withAlpha(25),
+                  color: hasProgress
+                      ? colorScheme.primary.withAlpha(60)
+                      : colorScheme.outline.withAlpha(25),
                 ),
               ),
               child: Material(
@@ -1006,34 +1738,82 @@ class _SeriesDetailScreenFromFavoriteState
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
+                        // Episode Thumbnail with progress bar
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: 120,
-                            height: 70,
-                            color: colorScheme.surface,
-                            child: episode.info.movieImage != null
-                                ? CachedNetworkImage(
-                                    imageUrl: episode.info.movieImage!,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        _buildEpisodePlaceholder(colorScheme),
-                                  )
-                                : _buildEpisodePlaceholder(colorScheme),
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 120,
+                                height: 70,
+                                color: colorScheme.surface,
+                                child: episode.info.movieImage != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: episode.info.movieImage!,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) =>
+                                            _buildEpisodePlaceholder(colorScheme),
+                                      )
+                                    : _buildEpisodePlaceholder(colorScheme),
+                              ),
+                              // Progress bar overlay
+                              if (hasProgress)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    height: 3,
+                                    color: Colors.black.withAlpha(100),
+                                    child: FractionallySizedBox(
+                                      alignment: Alignment.centerLeft,
+                                      widthFactor: progressPercent,
+                                      child: Container(
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 14),
+                        // Episode Info
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Episode ${episode.episodeNum ?? (index + 1)}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Episode ${episode.episodeNum ?? (index + 1)}',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: hasProgress
+                                          ? colorScheme.primary
+                                          : colorScheme.onSurface.withAlpha(150),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (hasProgress) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary.withAlpha(30),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '${(progressPercent * 100).round()}%',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          color: colorScheme.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -1059,10 +1839,22 @@ class _SeriesDetailScreenFromFavoriteState
                             ],
                           ),
                         ),
+                        // Download Button
+                        EpisodeDownloadButton(
+                          seriesId: widget.seriesId,
+                          seriesName: widget.seriesName,
+                          seriesCover: widget.seriesCover,
+                          episode: episode,
+                          seasonNumber: seasonNumber ?? 1,
+                        ),
+                        const SizedBox(width: 4),
+                        // Play/Resume Button
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: colorScheme.onSurface.withAlpha(15),
+                            color: hasProgress
+                                ? colorScheme.primary.withAlpha(30)
+                                : colorScheme.onSurface.withAlpha(15),
                             shape: BoxShape.circle,
                           ),
                           child: SvgPicture.asset(
@@ -1070,7 +1862,7 @@ class _SeriesDetailScreenFromFavoriteState
                             width: 18,
                             height: 18,
                             colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface,
+                              hasProgress ? colorScheme.primary : colorScheme.onSurface,
                               BlendMode.srcIn,
                             ),
                           ),

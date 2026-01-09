@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'theme/app_theme.dart';
 import 'shared/widgets/main_navigation.dart';
 import 'services/xtream_service.dart';
+import 'services/download_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,8 +38,15 @@ class IPTVApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => XtreamService()..loadSavedCredentials(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => XtreamService()..loadSavedCredentials(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => DownloadService()..init(),
+        ),
+      ],
       child: MaterialApp(
         title: 'IPTV Player',
         debugShowCheckedModeBanner: false,

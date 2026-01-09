@@ -56,6 +56,9 @@ dependencies:
   shared_preferences: ^2.3.3
   path_provider: ^2.1.0
 
+  # Downloads
+  dio: ^5.4.0
+
   # Window Management (Desktop Fullscreen)
   window_manager: ^0.4.3
 
