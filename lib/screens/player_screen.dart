@@ -93,6 +93,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _cursorVisible = true;
   Timer? _hideCursorTimer;
 
+  // Stream subscriptions (für sauberes Cleanup)
+  StreamSubscription<String>? _errorSubscription;
+  StreamSubscription<bool>? _playingSubscription;
+  StreamSubscription<bool>? _bufferingSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -188,11 +193,23 @@ class _PlayerScreenState extends State<PlayerScreen>
     _existingProgress = _xtreamService.getWatchProgress(widget.contentId!);
   }
 
+  void _cancelStreamSubscriptions() {
+    _errorSubscription?.cancel();
+    _playingSubscription?.cancel();
+    _bufferingSubscription?.cancel();
+    _errorSubscription = null;
+    _playingSubscription = null;
+    _bufferingSubscription = null;
+  }
+
   Future<void> _initPlayer() async {
+    // Cancel existing subscriptions to prevent listener accumulation
+    _cancelStreamSubscriptions();
+
     try {
       debugPrint('Playing URL: ${widget.streamUrl}');
 
-      _player.stream.error.listen((error) {
+      _errorSubscription = _player.stream.error.listen((error) {
         debugPrint('Player error: $error');
 
         // Nicht-fatale Fehler ignorieren (besonders bei Live-Streams)
@@ -219,7 +236,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       });
 
-      _player.stream.playing.listen((playing) {
+      _playingSubscription = _player.stream.playing.listen((playing) {
         if (mounted) {
           setState(() {
             _isPaused = !playing;
@@ -269,7 +286,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       });
 
-      _player.stream.buffering.listen((buffering) {
+      _bufferingSubscription = _player.stream.buffering.listen((buffering) {
         if (mounted) {
           setState(() => _isLoading = buffering);
         }
@@ -456,6 +473,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _pauseTitleController.dispose();
     _playPauseController.dispose();
     _focusNode.dispose();
+
+    // Cancel stream subscriptions before disposing player
+    _cancelStreamSubscriptions();
 
     // Save final progress before closing (fire and forget)
     _saveFinalProgress();
@@ -672,10 +692,15 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _reloadPlayer() async {
     try {
+      // Stop current playback to avoid race conditions with MPV
+      await _player.stop();
+
       String cleanUrl = _currentStreamUrl;
       while (cleanUrl.endsWith('.') || cleanUrl.endsWith(' ')) {
         cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
       }
+      debugPrint('Playing URL: $cleanUrl');
+      debugPrint('Clean URL: $cleanUrl');
       await _player.open(Media(cleanUrl));
     } catch (e) {
       debugPrint('Channel switch error: $e');
@@ -1089,99 +1114,205 @@ class _PlayerScreenState extends State<PlayerScreen>
     String errorMessage = _error ?? 'Unbekannter Fehler';
     if (errorMessage.contains('Failed to open')) {
       errorMessage = 'Stream konnte nicht geöffnet werden.\nDer Inhalt ist möglicherweise nicht verfügbar.';
+    } else if (errorMessage.length > 150) {
+      errorMessage = '${errorMessage.substring(0, 147)}...';
     }
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 400;
 
     return GestureDetector(
       // Verhindert, dass Taps zu den darunterliegenden Controls durchgereicht werden
       onTap: () {},
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: Colors.black.withAlpha(220),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.all(32),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.error.withAlpha(30),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.error_outline_rounded,
-                    color: colorScheme.error,
-                    size: 48,
-                  ),
+        color: Colors.black.withAlpha(230),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              child: Container(
+                margin: EdgeInsets.symmetric(
+                  horizontal: isCompact ? 20 : 32,
+                  vertical: 24,
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  'Wiedergabefehler',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+                constraints: const BoxConstraints(maxWidth: 380),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.grey[850]!,
+                      Colors.grey[900]!,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  errorMessage,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    height: 1.5,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Colors.white.withAlpha(15),
+                    width: 1,
                   ),
-                  textAlign: TextAlign.center,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(100),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 28),
-                Row(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Erneut versuchen
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _error = null;
-                          _isLoading = true;
-                        });
-                        _initPlayer();
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        side: const BorderSide(color: Colors.white30),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    // Header mit Icon
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(isCompact ? 24 : 32),
+                      decoration: BoxDecoration(
+                        color: colorScheme.error.withAlpha(15),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
                       ),
-                      icon: const Icon(Icons.refresh_rounded, size: 20),
-                      label: Text(
-                        'Erneut versuchen',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colorScheme.error.withAlpha(25),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: colorScheme.error.withAlpha(50),
+                                width: 2,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.wifi_off_rounded,
+                              color: colorScheme.error,
+                              size: isCompact ? 36 : 44,
+                            ),
+                          ),
+                          SizedBox(height: isCompact ? 16 : 20),
+                          Text(
+                            'Wiedergabefehler',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: isCompact ? 18 : 22,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    // Zurück
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      ),
-                      icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                      label: Text(
-                        'Zurück',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+
+                    // Body mit Fehlermeldung
+                    Padding(
+                      padding: EdgeInsets.all(isCompact ? 20 : 24),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(40),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withAlpha(8),
+                              ),
+                            ),
+                            child: Text(
+                              errorMessage,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white.withAlpha(180),
+                                fontSize: isCompact ? 13 : 14,
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+
+                          SizedBox(height: isCompact ? 20 : 24),
+
+                          // Buttons - vertikal gestapelt für bessere Mobile-Kompatibilität
+                          Column(
+                            children: [
+                              // Erneut versuchen (Primary)
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _error = null;
+                                      _isLoading = true;
+                                    });
+                                    _initPlayer();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.black,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.refresh_rounded, size: 20),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        'Erneut versuchen',
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              // Zurück (Secondary)
+                              SizedBox(
+                                width: double.infinity,
+                                child: TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.white.withAlpha(180),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.arrow_back_rounded,
+                                        size: 18,
+                                        color: Colors.white.withAlpha(150),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Zurück',
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 14,
+                                          color: Colors.white.withAlpha(180),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
