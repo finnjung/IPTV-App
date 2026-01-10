@@ -356,48 +356,24 @@ class _SeriesCard extends StatelessWidget {
                 ),
               ),
               // Tags (top left)
-              if (metadata.isPopular || metadata.quality != null)
+              if (metadata.quality != null)
                 Positioned(
                   top: 6,
                   left: 6,
-                  child: Row(
-                    children: [
-                      if (metadata.isPopular)
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/flame.svg',
-                            width: 12,
-                            height: 12,
-                            colorFilter: const ColorFilter.mode(
-                              Colors.white,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                      if (metadata.quality != null) ...[
-                        if (metadata.isPopular) const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      metadata.quality!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               // Title at bottom

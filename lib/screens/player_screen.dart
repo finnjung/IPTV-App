@@ -72,6 +72,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Keyboard Focus
   final FocusNode _focusNode = FocusNode();
 
+  // Debounce für Keyboard-Events (Workaround für macOS duplicate events bug)
+  DateTime? _lastKeyEventTime;
+  LogicalKeyboardKey? _lastKeyPressed;
+
   // Live TV Channel Switching (alphabetisch sortiert)
   List<_LiveChannel> _allLiveChannels = [];
   int _currentChannelIndex = 0;
@@ -84,6 +88,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _volume = 1.0;
   bool _isMuted = false;
   double _playbackSpeed = 1.0;
+
+  // Subtitle & Audio track
+  SubtitleTrack? _currentSubtitleTrack;
+  AudioTrack? _currentAudioTrack;
 
   // Volume/Speed Overlay
   String? _overlayText;
@@ -142,7 +150,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     // Hide system UI
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    _player = Player();
+    _player = Player(
+      configuration: PlayerConfiguration(
+        // Increase buffer size for smoother playback (default is 32MB)
+        bufferSize: 64 * 1024 * 1024, // 64 MB
+      ),
+    );
     _controller = VideoController(_player);
 
     // Cache the service for later use in dispose
@@ -299,6 +312,19 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       debugPrint('Clean URL: $cleanUrl');
 
+      // Configure MPV buffer settings for smoother live streaming
+      if (_player.platform is NativePlayer) {
+        final nativePlayer = _player.platform as NativePlayer;
+        // Base settings (always applied)
+        await nativePlayer.setProperty('cache', 'yes');
+        await nativePlayer.setProperty('demuxer-max-bytes', '67108864'); // 64 MB max
+        await nativePlayer.setProperty('network-timeout', '30');
+        // Disable subtitles by default (many streams have unwanted Arabic subs)
+        await nativePlayer.setProperty('sid', 'no');
+        // Apply user-selected buffer mode
+        await _applyBufferSettings(_xtreamService.bufferMode);
+      }
+
       await _player.open(Media(cleanUrl));
     } catch (e) {
       debugPrint('Player init error: $e');
@@ -420,6 +446,596 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showBufferSettings() {
+    // Controls sichtbar halten während Bottom Sheet offen ist
+    _cancelHideControlsTimer();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(50),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Title
+                Text(
+                  'Buffer-Einstellungen',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Buffer Options
+                _buildBufferOption(
+                  context,
+                  mode: 'live',
+                  title: 'Live',
+                  subtitle: 'Nah am Echtzeit, öfter laden',
+                  icon: Icons.bolt,
+                ),
+                const SizedBox(height: 8),
+                _buildBufferOption(
+                  context,
+                  mode: 'balanced',
+                  title: 'Ausgewogen',
+                  subtitle: 'Guter Kompromiss',
+                  icon: Icons.balance,
+                ),
+                const SizedBox(height: 8),
+                _buildBufferOption(
+                  context,
+                  mode: 'stable',
+                  title: 'Stabil',
+                  subtitle: 'Selten laden, etwas verzögert',
+                  icon: Icons.shield,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).then((_) {
+      // Controls-Timer wieder starten wenn Bottom Sheet geschlossen wird
+      if (!_isPaused) {
+        _startHideControlsTimer();
+      }
+    });
+  }
+
+  Widget _buildBufferOption(
+    BuildContext context, {
+    required String mode,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+  }) {
+    final currentMode = _xtreamService.bufferMode;
+    final isSelected = currentMode == mode;
+
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        _xtreamService.setBufferMode(mode);
+        _applyBufferSettings(mode);
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withAlpha(20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.white.withAlpha(50) : Colors.white.withAlpha(20),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.white54,
+              size: 24,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white54,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_circle,
+                color: Colors.white,
+                size: 24,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyBufferSettings(String mode) async {
+    if (_player.platform is! NativePlayer) return;
+    final nativePlayer = _player.platform as NativePlayer;
+
+    switch (mode) {
+      case 'live':
+        await nativePlayer.setProperty('cache-secs', '5');
+        await nativePlayer.setProperty('demuxer-readahead-secs', '3');
+        break;
+      case 'balanced':
+        await nativePlayer.setProperty('cache-secs', '15');
+        await nativePlayer.setProperty('demuxer-readahead-secs', '10');
+        break;
+      case 'stable':
+        await nativePlayer.setProperty('cache-secs', '30');
+        await nativePlayer.setProperty('demuxer-readahead-secs', '20');
+        break;
+    }
+    debugPrint('Applied buffer settings for mode: $mode');
+  }
+
+  void _showPlayerSettings() {
+    // Controls sichtbar halten während Bottom Sheet offen ist
+    _cancelHideControlsTimer();
+
+    final subtitleTracks = _player.state.tracks.subtitle;
+    final audioTracks = _player.state.tracks.audio;
+    final availableSubtitles = subtitleTracks.where((t) => t.id != 'no' && t.id != 'auto').toList();
+    final availableAudio = audioTracks.where((t) => t.id != 'no' && t.id != 'auto').toList();
+
+    // Aktuellen Audio-Track ermitteln
+    final currentAudio = _currentAudioTrack ??
+        (availableAudio.isNotEmpty ? availableAudio.first : null);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar + Title (fixed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(50),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Wiedergabe-Einstellungen',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+              // Scrollable content
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  children: [
+                    // === AUDIO SECTION ===
+                    _buildSectionHeader(
+                      'Sprache',
+                      'assets/icons/speaker-high.svg',
+                    ),
+                    const SizedBox(height: 8),
+                    if (availableAudio.isEmpty)
+                      _buildEmptyState('Keine Audio-Spuren verfügbar')
+                    else
+                      ...availableAudio.map((track) {
+                        final title = _getAudioTrackTitle(track);
+                        final subtitle = _getAudioTrackSubtitle(track);
+                        final isSelected = currentAudio?.id == track.id;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _buildAudioOption(
+                            context,
+                            track: track,
+                            title: title,
+                            subtitle: subtitle,
+                            isSelected: isSelected,
+                          ),
+                        );
+                      }),
+
+                    const SizedBox(height: 20),
+
+                    // === SUBTITLE SECTION ===
+                    _buildSectionHeader(
+                      'Untertitel',
+                      'assets/icons/subtitles.svg',
+                    ),
+                    const SizedBox(height: 8),
+                    // "Aus" Option
+                    _buildSubtitleOption(
+                      context,
+                      track: SubtitleTrack.no(),
+                      title: 'Aus',
+                      subtitle: 'Keine Untertitel',
+                      isSelected: _currentSubtitleTrack == null,
+                    ),
+                    const SizedBox(height: 8),
+                    if (availableSubtitles.isEmpty)
+                      _buildEmptyState('Keine Untertitel verfügbar')
+                    else
+                      ...availableSubtitles.map((track) {
+                        final title = _getSubtitleTrackTitle(track);
+                        final subtitle = _getSubtitleTrackSubtitle(track);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _buildSubtitleOption(
+                            context,
+                            track: track,
+                            title: title,
+                            subtitle: subtitle,
+                            isSelected: _currentSubtitleTrack?.id == track.id,
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) {
+      // Controls-Timer wieder starten wenn Bottom Sheet geschlossen wird
+      if (!_isPaused) {
+        _startHideControlsTimer();
+      }
+    });
+  }
+
+  Widget _buildSectionHeader(String title, String iconPath) {
+    return Row(
+      children: [
+        SvgPicture.asset(
+          iconPath,
+          width: 20,
+          height: 20,
+          colorFilter: const ColorFilter.mode(
+            Colors.white70,
+            BlendMode.srcIn,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: GoogleFonts.poppins(
+            color: Colors.white70,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      child: Text(
+        message,
+        style: GoogleFonts.poppins(
+          color: Colors.white38,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  String _getSubtitleTrackTitle(SubtitleTrack track) {
+    // Sprache aus dem Track extrahieren
+    if (track.language != null && track.language!.isNotEmpty) {
+      return _getLanguageName(track.language!);
+    }
+    if (track.title != null && track.title!.isNotEmpty) {
+      return track.title!;
+    }
+    return 'Untertitel ${track.id}';
+  }
+
+  String _getSubtitleTrackSubtitle(SubtitleTrack track) {
+    final parts = <String>[];
+    if (track.title != null && track.title!.isNotEmpty && track.language != null) {
+      parts.add(track.title!);
+    }
+    if (track.codec != null && track.codec!.isNotEmpty) {
+      parts.add(track.codec!.toUpperCase());
+    }
+    return parts.isEmpty ? 'Spur ${track.id}' : parts.join(' • ');
+  }
+
+  String _getLanguageName(String code) {
+    const languageNames = {
+      'de': 'Deutsch',
+      'deu': 'Deutsch',
+      'ger': 'Deutsch',
+      'en': 'Englisch',
+      'eng': 'Englisch',
+      'ar': 'Arabisch',
+      'ara': 'Arabisch',
+      'fr': 'Französisch',
+      'fra': 'Französisch',
+      'fre': 'Französisch',
+      'es': 'Spanisch',
+      'spa': 'Spanisch',
+      'it': 'Italienisch',
+      'ita': 'Italienisch',
+      'tr': 'Türkisch',
+      'tur': 'Türkisch',
+      'ru': 'Russisch',
+      'rus': 'Russisch',
+      'pl': 'Polnisch',
+      'pol': 'Polnisch',
+      'nl': 'Niederländisch',
+      'nld': 'Niederländisch',
+      'dut': 'Niederländisch',
+      'pt': 'Portugiesisch',
+      'por': 'Portugiesisch',
+      'ja': 'Japanisch',
+      'jpn': 'Japanisch',
+      'ko': 'Koreanisch',
+      'kor': 'Koreanisch',
+      'zh': 'Chinesisch',
+      'zho': 'Chinesisch',
+      'chi': 'Chinesisch',
+      'hi': 'Hindi',
+      'hin': 'Hindi',
+      'und': 'Unbekannt',
+    };
+    return languageNames[code.toLowerCase()] ?? code.toUpperCase();
+  }
+
+  Widget _buildSubtitleOption(
+    BuildContext context, {
+    required SubtitleTrack track,
+    required String title,
+    required String subtitle,
+    required bool isSelected,
+  }) {
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        _player.setSubtitleTrack(track);
+        setState(() {
+          _currentSubtitleTrack = track.id == 'no' ? null : track;
+        });
+        _showOverlay(track.id == 'no' ? 'Untertitel aus' : 'Untertitel: $title');
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withAlpha(20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.white.withAlpha(50) : Colors.white.withAlpha(20),
+          ),
+        ),
+        child: Row(
+          children: [
+            SvgPicture.asset(
+              track.id == 'no'
+                  ? 'assets/icons/subtitles-slash.svg'
+                  : 'assets/icons/subtitles.svg',
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(
+                isSelected ? Colors.white : Colors.white54,
+                BlendMode.srcIn,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white54,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_circle,
+                color: Colors.white,
+                size: 24,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getAudioTrackTitle(AudioTrack track) {
+    if (track.language != null && track.language!.isNotEmpty) {
+      return _getLanguageName(track.language!);
+    }
+    if (track.title != null && track.title!.isNotEmpty) {
+      return track.title!;
+    }
+    return 'Audio ${track.id}';
+  }
+
+  String _getAudioTrackSubtitle(AudioTrack track) {
+    final parts = <String>[];
+    if (track.title != null && track.title!.isNotEmpty && track.language != null) {
+      parts.add(track.title!);
+    }
+    if (track.channels != null) {
+      final channels = track.channels!;
+      if (channels == 2) {
+        parts.add('Stereo');
+      } else if (channels == 6) {
+        parts.add('5.1 Surround');
+      } else if (channels == 8) {
+        parts.add('7.1 Surround');
+      } else if (channels == 1) {
+        parts.add('Mono');
+      } else {
+        parts.add('$channels Kanäle');
+      }
+    }
+    if (track.codec != null && track.codec!.isNotEmpty) {
+      parts.add(track.codec!.toUpperCase());
+    }
+    return parts.isEmpty ? 'Spur ${track.id}' : parts.join(' • ');
+  }
+
+  Widget _buildAudioOption(
+    BuildContext context, {
+    required AudioTrack track,
+    required String title,
+    required String subtitle,
+    required bool isSelected,
+  }) {
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context);
+        _player.setAudioTrack(track);
+        setState(() {
+          _currentAudioTrack = track;
+        });
+        _showOverlay('Sprache: $title');
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withAlpha(20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.white.withAlpha(50) : Colors.white.withAlpha(20),
+          ),
+        ),
+        child: Row(
+          children: [
+            SvgPicture.asset(
+              'assets/icons/speaker-high.svg',
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(
+                isSelected ? Colors.white : Colors.white54,
+                BlendMode.srcIn,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white54,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_circle,
+                color: Colors.white,
+                size: 24,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -729,6 +1345,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
+
+    // Workaround für macOS duplicate keyboard events bug
+    // Ignoriere Events die zu schnell hintereinander kommen (< 50ms)
+    final now = DateTime.now();
+    if (_lastKeyEventTime != null && _lastKeyPressed == key) {
+      final diff = now.difference(_lastKeyEventTime!).inMilliseconds;
+      if (diff < 50) {
+        return KeyEventResult.handled; // Ignoriere Duplikat
+      }
+    }
+    _lastKeyEventTime = now;
+    _lastKeyPressed = key;
 
     // Leertaste oder K = Play/Pause
     if (key == LogicalKeyboardKey.space || key == LogicalKeyboardKey.keyK) {
@@ -1408,6 +2036,20 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
               ),
             ),
+          // Player-Settings (Sprache & Untertitel) bei Movies und Series
+          if (widget.contentType != ContentType.live)
+            IconButton(
+              onPressed: _showPlayerSettings,
+              icon: SvgPicture.asset(
+                'assets/icons/faders-horizontal.svg',
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
           // Fullscreen toggle (nur auf Desktop)
           if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux))
             IconButton(
@@ -1416,6 +2058,23 @@ class _PlayerScreenState extends State<PlayerScreen>
                 _isFullscreen
                     ? 'assets/icons/corners-in.svg'
                     : 'assets/icons/corners-out.svg',
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
+          // Buffer Settings (bei Live-TV anzeigen)
+          if (widget.contentType == ContentType.live)
+            IconButton(
+              onPressed: _showBufferSettings,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.white.withAlpha(30),
+              ),
+              icon: SvgPicture.asset(
+                'assets/icons/sliders.svg',
                 width: 24,
                 height: 24,
                 colorFilter: const ColorFilter.mode(

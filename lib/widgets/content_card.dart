@@ -151,33 +151,15 @@ class ContentCard extends StatelessWidget {
                   ),
                 ),
 
-              // Badges (Popular + Quality + 3D + Year + Language)
-              if ((metadata.isPopular || metadata.quality != null || metadata.is3D || metadata.year != null || metadata.language != null) && !isLive)
+              // Badges (Quality + 3D + Year + Language)
+              if ((metadata.quality != null || metadata.is3D || metadata.year != null || metadata.language != null) && !isLive)
                 Positioned(
                   top: 8,
                   left: 8,
                   right: 8,
                   child: Row(
                     children: [
-                      if (metadata.isPopular)
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/flame.svg',
-                            width: 12,
-                            height: 12,
-                            colorFilter: const ColorFilter.mode(
-                              Colors.white,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                      if (metadata.quality != null) ...[
-                        if (metadata.isPopular) const SizedBox(width: 4),
+                      if (metadata.quality != null)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
@@ -193,9 +175,8 @@ class ContentCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                      ],
                       if (metadata.is3D) ...[
-                        if (metadata.isPopular || metadata.quality != null) const SizedBox(width: 4),
+                        if (metadata.quality != null) const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(

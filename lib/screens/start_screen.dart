@@ -291,8 +291,6 @@ class _StartScreenState extends State<StartScreen> {
   List<Widget> _buildCuratedPopularSectionOnly(StartScreenContent content) {
     if (content.curatedMovies.isNotEmpty || content.curatedSeries.isNotEmpty) {
       return _buildCuratedPopularSection(content);
-    } else if (content.popularMovies.isNotEmpty || content.popularSeries.isNotEmpty) {
-      return _buildFallbackPopularSection(content);
     }
     return [];
   }
@@ -339,71 +337,6 @@ class _StartScreenState extends State<StartScreen> {
           ),
         ),
       ),
-    ];
-  }
-
-  List<Widget> _buildFallbackPopularSection(StartScreenContent content) {
-    return [
-      if (content.popularMovies.isNotEmpty) ...[
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: _SectionHeader(
-              title: 'Beliebte Filme',
-              icon: 'assets/icons/flame.svg',
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: content.popularMovies.length,
-              itemBuilder: (context, index) {
-                final movie = content.popularMovies[index];
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index < content.popularMovies.length - 1 ? 12 : 0,
-                  ),
-                  child: _MovieCard(movie: movie),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-      if (content.popularSeries.isNotEmpty) ...[
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-            child: _SectionHeader(
-              title: 'Beliebte Serien',
-              icon: 'assets/icons/flame.svg',
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: content.popularSeries.length,
-              itemBuilder: (context, index) {
-                final series = content.popularSeries[index];
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index < content.popularSeries.length - 1 ? 12 : 0,
-                  ),
-                  child: _SeriesCard(series: series),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
     ];
   }
 
@@ -640,49 +573,25 @@ class _MovieCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Tags
-              if (metadata.isPopular || metadata.quality != null)
+              // Quality Tag
+              if (metadata.quality != null)
                 Positioned(
                   top: 6,
                   left: 6,
-                  child: Row(
-                    children: [
-                      if (metadata.isPopular)
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/flame.svg',
-                            width: 12,
-                            height: 12,
-                            colorFilter: const ColorFilter.mode(
-                              Colors.white,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                      if (metadata.quality != null) ...[
-                        if (metadata.isPopular) const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      metadata.quality!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               // Title at bottom
@@ -786,49 +695,25 @@ class _SeriesCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Tags
-              if (metadata.isPopular || metadata.quality != null)
+              // Quality Tag
+              if (metadata.quality != null)
                 Positioned(
                   top: 6,
                   left: 6,
-                  child: Row(
-                    children: [
-                      if (metadata.isPopular)
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/flame.svg',
-                            width: 12,
-                            height: 12,
-                            colorFilter: const ColorFilter.mode(
-                              Colors.white,
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                      if (metadata.quality != null) ...[
-                        if (metadata.isPopular) const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      metadata.quality!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               // Title at bottom

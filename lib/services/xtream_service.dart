@@ -63,6 +63,9 @@ class XtreamService extends ChangeNotifier {
   // Bevorzugte Sprache für Content
   String? _preferredLanguage;
 
+  // Player Buffer Mode: 'live', 'balanced', 'stable'
+  String _bufferMode = 'balanced';
+
   // Cached Start Screen Content
   StartScreenContent? _startScreenContent;
   bool _isLoadingStartScreen = false;
@@ -93,6 +96,7 @@ class XtreamService extends ChangeNotifier {
   bool get autoHideEmptySeries => _autoHideEmptySeries;
   bool get isLoading => _isLoading;
   String? get preferredLanguage => _preferredLanguage;
+  String get bufferMode => _bufferMode;
   String? get error => _error;
   XtreamCredentials? get credentials => _credentials;
   XTremeCodeGeneralInformation? get serverInfo => _serverInfo;
@@ -153,6 +157,9 @@ class XtreamService extends ChangeNotifier {
 
     // Bevorzugte Sprache laden
     _preferredLanguage = prefs.getString('preferred_language');
+
+    // Buffer Mode laden
+    _bufferMode = prefs.getString('player_buffer_mode') ?? 'balanced';
 
     if (serverUrl != null && username != null && password != null) {
       _credentials = XtreamCredentials(
@@ -686,6 +693,19 @@ class XtreamService extends ChangeNotifier {
     notifyListeners();
 
     debugPrint('Auto-hide empty series: $value');
+  }
+
+  /// Setzt den Buffer-Modus für den Video-Player
+  Future<void> setBufferMode(String mode) async {
+    if (mode != 'live' && mode != 'balanced' && mode != 'stable') {
+      debugPrint('Invalid buffer mode: $mode');
+      return;
+    }
+    _bufferMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('player_buffer_mode', mode);
+    notifyListeners();
+    debugPrint('Buffer mode set to: $mode');
   }
 
   /// Speichert die leeren Serien-IDs
@@ -1813,19 +1833,7 @@ MoviesScreenContent _buildMoviesScreenContent(List<XTremeCodeVodItem> allMovies)
   final categories = <PseudoCategory<XTremeCodeVodItem>>[];
   const limit = 20;
 
-  // 1. Beliebt - Quick-Filter mit Early-Exit
-  final popular = _findUpTo(allMovies, limit, (m) {
-    return ContentParser.isPopularQuick(m.name ?? '');
-  });
-  if (popular.isNotEmpty) {
-    categories.add(PseudoCategory(
-      title: 'Beliebt',
-      icon: 'assets/icons/flame.svg',
-      items: popular,
-    ));
-  }
-
-  // 2. 4K Filme - Quick-Filter mit Early-Exit
+  // 1. 4K Filme - Quick-Filter mit Early-Exit
   final movies4k = _findUpTo(allMovies, limit, (m) {
     final quality = ContentParser.getQualityQuick(m.name ?? '');
     return quality == '4K' || quality == '8K';
@@ -1878,19 +1886,7 @@ SeriesScreenContent _buildSeriesScreenContent(List<XTremeCodeSeriesItem> allSeri
   final categories = <PseudoCategory<XTremeCodeSeriesItem>>[];
   const limit = 20;
 
-  // 1. Beliebt - Quick-Filter mit Early-Exit
-  final popular = _findUpTo(allSeries, limit, (s) {
-    return ContentParser.isPopularQuick(s.name ?? '');
-  });
-  if (popular.isNotEmpty) {
-    categories.add(PseudoCategory(
-      title: 'Beliebt',
-      icon: 'assets/icons/flame.svg',
-      items: popular,
-    ));
-  }
-
-  // 2. 4K Serien - Quick-Filter mit Early-Exit
+  // 1. 4K Serien - Quick-Filter mit Early-Exit
   final series4k = _findUpTo(allSeries, limit, (s) {
     final quality = ContentParser.getQualityQuick(s.name ?? '');
     return quality == '4K' || quality == '8K';
@@ -1943,19 +1939,7 @@ LiveTvScreenContent _buildLiveTvScreenContent(List<XTremeCodeLiveStreamItem> all
   final categories = <PseudoCategory<XTremeCodeLiveStreamItem>>[];
   const limit = 20;
 
-  // 1. Beliebt - Quick-Filter mit Early-Exit
-  final popular = _findUpTo(allStreams, limit, (s) {
-    return ContentParser.isPopularQuick(s.name ?? '');
-  });
-  if (popular.isNotEmpty) {
-    categories.add(PseudoCategory(
-      title: 'Beliebt',
-      icon: 'assets/icons/flame.svg',
-      items: popular,
-    ));
-  }
-
-  // 2. Deutsche Sender - Kombinierter Quick-Check
+  // 1. Deutsche Sender - Kombinierter Quick-Check
   final germanStreams = _findUpTo(allStreams, limit, (s) {
     final name = s.name ?? '';
     // Quick country check

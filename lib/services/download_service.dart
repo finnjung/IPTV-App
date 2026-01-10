@@ -11,7 +11,19 @@ class DownloadService extends ChangeNotifier {
   factory DownloadService() => _instance;
   DownloadService._internal();
 
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(BaseOptions(
+    // Simuliere einen Media-Player um Server-Blockaden zu umgehen
+    headers: {
+      'User-Agent': 'VLC/3.0.20 LibVLC/3.0.20',
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity',
+      'Connection': 'keep-alive',
+    },
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(minutes: 60),
+    followRedirects: true,
+    maxRedirects: 5,
+  ));
   final Map<String, CancelToken> _cancelTokens = {};
   List<Download> _downloads = [];
   bool _isInitialized = false;
@@ -291,14 +303,19 @@ class DownloadService extends ChangeNotifier {
         debugPrint('Resuming download from byte $startByte');
       }
 
-      // Download starten
+      // Download starten - immer Range-Request um wie Streaming auszusehen
       final response = await _dio.download(
         download.sourceUrl,
         tempPath,
         cancelToken: cancelToken,
         deleteOnError: false,
         options: Options(
-          headers: startByte > 0 ? {'Range': 'bytes=$startByte-'} : null,
+          headers: {
+            'Range': 'bytes=$startByte-',
+            'Referer': Uri.parse(download.sourceUrl).origin,
+          },
+          // Accept partial content (206) as success
+          validateStatus: (status) => status == 200 || status == 206,
         ),
         onReceiveProgress: (received, total) {
           final actualTotal = total > 0 ? total + startByte : 0;
@@ -496,13 +513,36 @@ class DownloadService extends ChangeNotifier {
 
   /// Hilfsfunktion für Fehlermeldungen
   String _getErrorMessage(DioException e) {
+    // Prüfe auf spezifische Status-Codes
+    final statusCode = e.response?.statusCode;
+    if (statusCode != null) {
+      switch (statusCode) {
+        case 403:
+          return 'Download vom Anbieter nicht erlaubt';
+        case 404:
+          return 'Inhalt nicht gefunden';
+        case 429:
+          return 'Zu viele Anfragen - bitte warten';
+        case 458:
+          return 'Download vom Streaming-Anbieter blockiert';
+        case 500:
+        case 502:
+        case 503:
+          return 'Server vorübergehend nicht erreichbar';
+      }
+      // Andere 4xx Fehler
+      if (statusCode >= 400 && statusCode < 500) {
+        return 'Download vom Anbieter nicht erlaubt ($statusCode)';
+      }
+    }
+
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
         return 'Zeitüberschreitung';
       case DioExceptionType.connectionError:
         return 'Verbindungsfehler';
       case DioExceptionType.badResponse:
-        return 'Server-Fehler (${e.response?.statusCode})';
+        return 'Server-Fehler ($statusCode)';
       default:
         return e.message ?? 'Unbekannter Fehler';
     }
