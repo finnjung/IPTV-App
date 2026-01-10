@@ -19,6 +19,14 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   Widget _buildDownloadsSection(ColorScheme colorScheme) {
     final downloadService = context.watch<DownloadService>();
     final downloadCount = downloadService.completedDownloads.length;
@@ -39,95 +47,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colorScheme.outline.withAlpha(25),
-              width: 1,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const DownloadsScreen()),
-                );
-              },
+        _FocusableProfileItem(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const DownloadsScreen()),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.download_rounded,
+                      size: 20,
+                      color: Colors.blue.shade300,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Meine Downloads',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          downloadCount > 0
+                              ? '$downloadCount Downloads${activeCount > 0 ? ' · $activeCount aktiv' : ''} · ${downloadService.formattedTotalSize}'
+                              : 'Keine Downloads',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (activeCount > 0)
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
                         color: Colors.blue.withAlpha(30),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
-                        Icons.download_rounded,
-                        size: 20,
-                        color: Colors.blue.shade300,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Meine Downloads',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            downloadCount > 0
-                                ? '$downloadCount Downloads${activeCount > 0 ? ' · $activeCount aktiv' : ''} · ${downloadService.formattedTotalSize}'
-                                : 'Keine Downloads',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: colorScheme.onSurface.withAlpha(150),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (activeCount > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withAlpha(30),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '$activeCount',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue.shade300,
-                          ),
+                      child: Text(
+                        '$activeCount',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade300,
                         ),
                       ),
-                    SvgPicture.asset(
-                      'assets/icons/caret-right.svg',
-                      width: 18,
-                      height: 18,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(100),
-                        BlendMode.srcIn,
-                      ),
                     ),
-                  ],
-                ),
+                  SvgPicture.asset(
+                    'assets/icons/caret-right.svg',
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(100),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -152,191 +156,196 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
+        // Info-Box (nicht interaktiv)
         Container(
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
+            color: colorScheme.onSurface.withAlpha(10),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: colorScheme.outline.withAlpha(25),
               width: 1,
             ),
           ),
-          child: Column(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Info-Box
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SvgPicture.asset(
-                      'assets/icons/info.svg',
-                      width: 20,
-                      height: 20,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(150),
-                        BlendMode.srcIn,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Manche Serien haben keine Episoden hinterlegt. '
-                        'Für eine bessere Nutzererfahrung werden diese automatisch ausgeblendet, '
-                        'sobald du sie einmal öffnest.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: colorScheme.onSurface.withAlpha(180),
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
+              SvgPicture.asset(
+                'assets/icons/info.svg',
+                width: 20,
+                height: 20,
+                colorFilter: ColorFilter.mode(
+                  colorScheme.onSurface.withAlpha(150),
+                  BlendMode.srcIn,
                 ),
               ),
-
-              // Toggle
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.onSurface.withAlpha(15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: SvgPicture.asset(
-                        'assets/icons/eye-slash.svg',
-                        width: 20,
-                        height: 20,
-                        colorFilter: ColorFilter.mode(
-                          colorScheme.onSurface.withAlpha(180),
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Automatisch ausblenden',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            xtreamService.autoHideEmptySeries
-                                ? 'Leere Serien werden versteckt'
-                                : 'Alle Serien werden angezeigt',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: colorScheme.onSurface.withAlpha(150),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: xtreamService.autoHideEmptySeries,
-                      onChanged: (value) {
-                        xtreamService.setAutoHideEmptySeries(value);
-                      },
-                      activeTrackColor: colorScheme.onSurface.withAlpha(100),
-                      thumbColor: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return colorScheme.onSurface;
-                        }
-                        return null;
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-
-              Divider(
-                height: 1,
-                indent: 60,
-                color: colorScheme.outline.withAlpha(25),
-              ),
-
-              // Ausgeblendete Serien Zähler & Reset
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: xtreamService.emptySeriesCount > 0 ? _showResetBottomSheet : null,
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: colorScheme.onSurface.withAlpha(15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/arrows-clockwise.svg',
-                            width: 20,
-                            height: 20,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface.withAlpha(180),
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Ausgeblendete Serien',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                xtreamService.emptySeriesCount > 0
-                                    ? '${xtreamService.emptySeriesCount} Serien ausgeblendet'
-                                    : 'Keine Serien ausgeblendet',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (xtreamService.emptySeriesCount > 0)
-                          SvgPicture.asset(
-                            'assets/icons/caret-right.svg',
-                            width: 18,
-                            height: 18,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface.withAlpha(100),
-                              BlendMode.srcIn,
-                            ),
-                          ),
-                      ],
-                    ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Manche Serien haben keine Episoden hinterlegt. '
+                  'Für eine bessere Nutzererfahrung werden diese automatisch ausgeblendet, '
+                  'sobald du sie einmal öffnest.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: colorScheme.onSurface.withAlpha(180),
+                    height: 1.4,
                   ),
                 ),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Toggle - fokussierbar
+        _FocusableProfileItem(
+          onTap: () {
+            xtreamService.setAutoHideEmptySeries(!xtreamService.autoHideEmptySeries);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/eye-slash.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Automatisch ausblenden',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          xtreamService.autoHideEmptySeries
+                              ? 'Leere Serien werden versteckt'
+                              : 'Alle Serien werden angezeigt',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: xtreamService.autoHideEmptySeries,
+                    onChanged: (value) {
+                      xtreamService.setAutoHideEmptySeries(value);
+                    },
+                    activeTrackColor: colorScheme.onSurface.withAlpha(100),
+                    thumbColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return colorScheme.onSurface;
+                      }
+                      return null;
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Ausgeblendete Serien Zähler & Reset - fokussierbar
+        _FocusableProfileItem(
+          onTap: xtreamService.emptySeriesCount > 0 ? _showResetBottomSheet : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/arrows-clockwise.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ausgeblendete Serien',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          xtreamService.emptySeriesCount > 0
+                              ? '${xtreamService.emptySeriesCount} Serien ausgeblendet'
+                              : 'Keine Serien ausgeblendet',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (xtreamService.emptySeriesCount > 0)
+                    SvgPicture.asset(
+                      'assets/icons/caret-right.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(100),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
@@ -364,116 +373,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
+        // Info-Box (nicht interaktiv)
         Container(
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
+            color: colorScheme.onSurface.withAlpha(10),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: colorScheme.outline.withAlpha(25),
               width: 1,
             ),
           ),
-          child: Column(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Info-Box
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              SvgPicture.asset(
+                'assets/icons/info.svg',
+                width: 20,
+                height: 20,
+                colorFilter: ColorFilter.mode(
+                  colorScheme.onSurface.withAlpha(150),
+                  BlendMode.srcIn,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SvgPicture.asset(
-                      'assets/icons/info.svg',
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Inhalte in deiner bevorzugten Sprache werden auf der Startseite priorisiert angezeigt.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: colorScheme.onSurface.withAlpha(180),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Language Selection - fokussierbar
+        _FocusableProfileItem(
+          onTap: _showLanguageBottomSheet,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/globe.svg',
                       width: 20,
                       height: 20,
                       colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(150),
+                        colorScheme.onSurface.withAlpha(180),
                         BlendMode.srcIn,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Inhalte in deiner bevorzugten Sprache werden auf der Startseite priorisiert angezeigt.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: colorScheme.onSurface.withAlpha(180),
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Language Selection
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _showLanguageBottomSheet,
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    child: Row(
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: colorScheme.onSurface.withAlpha(15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: SvgPicture.asset(
-                            'assets/icons/globe.svg',
-                            width: 20,
-                            height: 20,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface.withAlpha(180),
-                              BlendMode.srcIn,
-                            ),
+                        Text(
+                          'Bevorzugte Sprache',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
                           ),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Bevorzugte Sprache',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                languageName ?? 'Keine Präferenz',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  color: colorScheme.onSurface.withAlpha(150),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SvgPicture.asset(
-                          'assets/icons/caret-right.svg',
-                          width: 18,
-                          height: 18,
-                          colorFilter: ColorFilter.mode(
-                            colorScheme.onSurface.withAlpha(100),
-                            BlendMode.srcIn,
+                        const SizedBox(height: 2),
+                        Text(
+                          languageName ?? 'Keine Präferenz',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  SvgPicture.asset(
+                    'assets/icons/caret-right.svg',
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(100),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ],
@@ -725,6 +730,167 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildAppSection(ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'App',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface.withAlpha(150),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        // Erscheinungsbild
+        _FocusableProfileItem(
+          onTap: () {},
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/moon.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Erscheinungsbild',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Dunkel',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SvgPicture.asset(
+                    'assets/icons/caret-right.svg',
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(100),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Über
+        _FocusableProfileItem(
+          onTap: () {},
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/info.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Über',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Version 1.0.0',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SvgPicture.asset(
+                    'assets/icons/caret-right.svg',
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(100),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDebugSection(ColorScheme colorScheme, XtreamService xtreamService) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -741,75 +907,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colorScheme.error.withAlpha(50),
-              width: 1,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showDebugAnalysis(xtreamService),
+        _FocusableProfileItem(
+          onTap: () => _showDebugAnalysis(xtreamService),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.error.withAlpha(25),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: SvgPicture.asset(
-                        'assets/icons/broadcast.svg',
-                        width: 20,
-                        height: 20,
-                        colorFilter: ColorFilter.mode(
-                          colorScheme.error.withAlpha(200),
-                          BlendMode.srcIn,
-                        ),
-                      ),
+              border: Border.all(
+                color: colorScheme.error.withAlpha(50),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.error.withAlpha(25),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Live TV Kürzel analysieren',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Präfixe/Suffixe und Sonderzeichen finden',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: colorScheme.onSurface.withAlpha(150),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SvgPicture.asset(
-                      'assets/icons/caret-right.svg',
-                      width: 18,
-                      height: 18,
+                    child: SvgPicture.asset(
+                      'assets/icons/broadcast.svg',
+                      width: 20,
+                      height: 20,
                       colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(100),
+                        colorScheme.error.withAlpha(200),
                         BlendMode.srcIn,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Live TV Kürzel analysieren',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Präfixe/Suffixe und Sonderzeichen finden',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SvgPicture.asset(
+                    'assets/icons/caret-right.svg',
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(100),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1043,6 +1205,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
+          controller: _scrollController,
           child: Padding(
             padding: EdgeInsets.fromLTRB(20, 20 + extraTopPadding, 20, 20),
             child: Column(
@@ -1222,24 +1385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 24),
 
                 // App Settings
-                _buildSection(
-                  context,
-                  'App',
-                  [
-                    _SettingsItem(
-                      icon: 'assets/icons/moon.svg',
-                      title: 'Erscheinungsbild',
-                      subtitle: 'Dunkel',
-                      onTap: () {},
-                    ),
-                    _SettingsItem(
-                      icon: 'assets/icons/info.svg',
-                      title: 'Über',
-                      subtitle: 'Version 1.0.0',
-                      onTap: () {},
-                    ),
-                  ],
-                ),
+                _buildAppSection(colorScheme),
 
                 const SizedBox(height: 24),
 
@@ -1249,32 +1395,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 24),
 
                 // Disconnect Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _confirmDisconnect(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colorScheme.error,
-                      side: BorderSide(color: colorScheme.error.withAlpha(100)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                _FocusableProfileItem(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _confirmDisconnect(context),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: colorScheme.error.withAlpha(100)),
                     ),
-                    icon: SvgPicture.asset(
-                      'assets/icons/sign-out.svg',
-                      width: 20,
-                      height: 20,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.error,
-                        BlendMode.srcIn,
-                      ),
-                    ),
-                    label: Text(
-                      'Verbindung trennen',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          'assets/icons/sign-out.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.error,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Verbindung trennen',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.error,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1611,6 +1762,132 @@ class _LanguageOption extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fokussierbarer Container für Profil-Elemente mit weißem Rahmen und Smooth Scrolling
+class _FocusableProfileItem extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final BorderRadius borderRadius;
+  final bool autofocus;
+
+  const _FocusableProfileItem({
+    required this.child,
+    this.onTap,
+    this.borderRadius = const BorderRadius.all(Radius.circular(16)),
+    this.autofocus = false,
+  });
+
+  @override
+  State<_FocusableProfileItem> createState() => _FocusableProfileItemState();
+}
+
+class _FocusableProfileItemState extends State<_FocusableProfileItem>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() {
+      _isFocused = hasFocus;
+    });
+    if (hasFocus) {
+      _scaleController.forward();
+      // Smooth scroll zum fokussierten Element
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap?.call();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              borderRadius: widget.borderRadius,
+              border: Border.all(
+                color: _isFocused ? Colors.white : Colors.transparent,
+                width: 3,
+              ),
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(40),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: widget.borderRadius,
+              child: widget.child,
+            ),
           ),
         ),
       ),
