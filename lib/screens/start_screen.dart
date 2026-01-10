@@ -116,10 +116,42 @@ class _StartScreenState extends State<StartScreen> {
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
               ],
 
-            // Favorites Section (after Continue Watching) - always rendered for smooth animation
-            SliverToBoxAdapter(
-              child: _AnimatedFavoritesSection(favorites: favorites),
-            ),
+            // Favorites Section (after Continue Watching)
+            if (favorites.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: _SectionHeader(
+                    title: 'Favoriten',
+                    icon: 'assets/icons/heart-fill.svg',
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 120,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    itemCount: favorites.length,
+                    itemBuilder: (context, index) {
+                      final favorite = favorites[index];
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          right: index < favorites.length - 1 ? 12 : 0,
+                        ),
+                        child: _FavoriteCard(
+                          favorite: favorite,
+                          onRemove: () => context.read<XtreamService>().removeFavorite(favorite.id),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            ],
 
               // Loading indicator (full screen when no content yet)
               if (isLoading && content == null)
@@ -1263,25 +1295,29 @@ class _AnimatedFavoritesSection extends StatelessWidget {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
       alignment: Alignment.topCenter,
+      clipBehavior: Clip.none, // Wichtig: Fokus-Effekte nicht abschneiden
       child: favorites.isEmpty
           ? const SizedBox.shrink()
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                  child: _SectionHeader(
-                    title: 'Favoriten',
-                    icon: 'assets/icons/heart-fill.svg',
+          : Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: _SectionHeader(
+                      title: 'Favoriten',
+                      icon: 'assets/icons/heart-fill.svg',
+                    ),
                   ),
-                ),
-                SizedBox(
-                  height: 100, // Extra Platz für Fokus-Scale-Effekt
-                  child: _AnimatedFavoritesList(favorites: favorites),
-                ),
-                const SizedBox(height: 12),
-              ],
+                  SizedBox(
+                    height: 150, // Extra Platz für Fokus-Scale-Effekt + Border + Shadow
+                    child: _AnimatedFavoritesList(favorites: favorites),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
             ),
     );
   }
@@ -1377,7 +1413,7 @@ class _AnimatedFavoritesListState extends State<_AnimatedFavoritesList> {
       key: _listKey,
       scrollDirection: Axis.horizontal,
       clipBehavior: Clip.none, // Verhindert Clipping bei Fokus-Scale
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
       initialItemCount: _internalList.length,
       itemBuilder: (context, index, animation) {
         final favorite = _internalList[index];
@@ -1490,6 +1526,7 @@ class _FavoriteCardState extends State<_FavoriteCard>
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             width: 220,
+            height: 90, // Feste Höhe für konsistentes Layout
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(14),
@@ -1511,8 +1548,7 @@ class _FavoriteCardState extends State<_FavoriteCard>
               children: [
                 // Small image/icon on the left
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 90,
                   decoration: BoxDecoration(
                     color: colorScheme.onSurface.withAlpha(15),
                     borderRadius: const BorderRadius.only(
