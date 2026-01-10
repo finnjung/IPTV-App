@@ -87,15 +87,22 @@ class AppTheme {
   }
 
   static ThemeData get darkTheme {
+    final baseColorScheme = ColorScheme.fromSeed(
+      seedColor: primaryColor,
+      brightness: Brightness.dark,
+      surface: surfaceDark,
+    );
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: backgroundDark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryColor,
-        brightness: Brightness.dark,
-        surface: surfaceDark,
-      ),
+      colorScheme: baseColorScheme,
+      // TV-optimized focus colors
+      focusColor: Colors.white.withAlpha(40),
+      hoverColor: Colors.white.withAlpha(20),
+      highlightColor: Colors.white.withAlpha(30),
+      splashColor: Colors.white.withAlpha(30),
       textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -120,13 +127,51 @@ class AppTheme {
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          // Larger padding for TV remote navigation
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          minimumSize: const Size(48, 48), // TV-friendly minimum touch target
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           textStyle: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
           ),
+        ).copyWith(
+          // Clear focus indicator for TV
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return const BorderSide(color: Colors.white, width: 3);
+            }
+            return BorderSide.none;
+          }),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: textPrimaryDark,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          minimumSize: const Size(48, 48),
+        ).copyWith(
+          // Clear focus indicator for TV
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return const BorderSide(color: Colors.white, width: 2);
+            }
+            return BorderSide.none;
+          }),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size(48, 48), // TV-friendly minimum touch target
+        ).copyWith(
+          // Clear focus indicator for TV
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return const BorderSide(color: Colors.white, width: 2);
+            }
+            return BorderSide.none;
+          }),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -142,7 +187,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: primaryColor, width: 2),
+          borderSide: const BorderSide(color: Colors.white, width: 3),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         hintStyle: const TextStyle(color: textMutedDark),

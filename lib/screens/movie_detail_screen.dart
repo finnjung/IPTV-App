@@ -329,6 +329,7 @@ class MovieDetailScreen extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
+        autofocus: true, // Auto-focus for TV remote navigation
         onPressed: () => _play(context, xtreamService, downloadService, isDownloaded, resume: hasProgress),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,

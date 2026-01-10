@@ -327,6 +327,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   // Continue Button
                   Expanded(
                     child: ElevatedButton.icon(
+                      autofocus: true, // Auto-focus for TV remote navigation
                       onPressed: () => _playEpisode(episode, seasonNum, resume: true),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorScheme.primary,
@@ -1271,6 +1272,7 @@ class _SeriesDetailScreenFromFavoriteState
                   // Continue Button
                   Expanded(
                     child: ElevatedButton.icon(
+                      autofocus: true, // Auto-focus for TV remote navigation
                       onPressed: () => _playEpisode(episode, seasonNum, resume: true),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorScheme.primary,

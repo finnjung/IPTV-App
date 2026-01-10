@@ -18,4 +18,19 @@ class MainFlutterWindow: NSWindow {
 
     super.awakeFromNib()
   }
+
+  // Ensure window can become key window (required for keyboard input)
+  override var canBecomeKey: Bool {
+    return true
+  }
+
+  // Ensure window can become main window
+  override var canBecomeMain: Bool {
+    return true
+  }
+
+  // Accept first responder for keyboard events
+  override var acceptsFirstResponder: Bool {
+    return true
+  }
 }

@@ -9,12 +9,16 @@ import 'theme/app_theme.dart';
 import 'shared/widgets/main_navigation.dart';
 import 'services/xtream_service.dart';
 import 'services/download_service.dart';
+import 'utils/tv_utils.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize MediaKit for video playback
   MediaKit.ensureInitialized();
+
+  // Initialize TV detection for Android TV / Fire TV
+  await TvUtils.initialize();
 
   // Initialize window_manager for desktop platforms
   if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {

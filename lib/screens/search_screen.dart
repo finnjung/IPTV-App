@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,8 @@ import '../services/xtream_service.dart';
 import '../models/favorite.dart';
 import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
+import '../utils/tv_utils.dart';
+import '../widgets/tv_keyboard.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 
@@ -29,10 +32,15 @@ class _SearchScreenState extends State<SearchScreen> {
   SearchResults _results = SearchResults.empty();
   bool _isSearching = false;
   String _lastQuery = '';
+  bool _showTvKeyboard = false;
 
   // Discovery data
   List<XTremeCodeVodItem> _suggestedMovies = [];
   List<XTremeCodeSeriesItem> _suggestedSeries = [];
+
+  // Check if running on Android TV or Fire TV
+  // Uses centralized TV detection from TvUtils
+  bool get _isTvDevice => TvUtils.useTvInterface;
 
   static const List<String> _quickSearchTerms = [
     'Action',
@@ -50,10 +58,22 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    // Listen to search controller changes for TV keyboard
+    _searchController.addListener(_onSearchControllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
+      if (!_isTvDevice) {
+        _focusNode.requestFocus();
+      }
       _loadDiscoveryContent();
     });
+  }
+
+  void _onSearchControllerChanged() {
+    // Trigger search when typing on TV keyboard
+    if (_showTvKeyboard) {
+      setState(() {});
+      _onSearchChanged(_searchController.text);
+    }
   }
 
   void _loadDiscoveryContent() {
@@ -87,6 +107,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchControllerChanged);
     _searchController.dispose();
     _focusNode.dispose();
     _debounce?.cancel();
@@ -263,66 +284,143 @@ class _SearchScreenState extends State<SearchScreen> {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    // Suchfeld
-                    Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        focusNode: _focusNode,
-                        onChanged: _onSearchChanged,
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: colorScheme.onSurface,
+                    // Suchfeld - TV-kompatibel
+                    GestureDetector(
+                      onTap: _isTvDevice
+                          ? () => setState(() => _showTvKeyboard = true)
+                          : null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(16),
+                          border: _showTvKeyboard
+                              ? Border.all(color: Colors.white, width: 2)
+                              : null,
                         ),
-                        decoration: InputDecoration(
-                          hintText: 'Filme, Serien, Live TV...',
-                          hintStyle: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: colorScheme.onSurface.withAlpha(100),
-                          ),
-                          prefixIcon: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: SvgPicture.asset(
-                              'assets/icons/magnifying-glass.svg',
-                              width: 22,
-                              height: 22,
-                              colorFilter: ColorFilter.mode(
-                                colorScheme.onSurface.withAlpha(150),
-                                BlendMode.srcIn,
-                              ),
-                            ),
-                          ),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? GestureDetector(
-                                  onTap: () {
-                                    _searchController.clear();
-                                    _onSearchChanged('');
-                                  },
-                                  child: Padding(
+                        child: _isTvDevice && _showTvKeyboard
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SvgPicture.asset(
+                                      'assets/icons/magnifying-glass.svg',
+                                      width: 22,
+                                      height: 22,
+                                      colorFilter: ColorFilter.mode(
+                                        colorScheme.onSurface.withAlpha(150),
+                                        BlendMode.srcIn,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Text(
+                                        _searchController.text.isEmpty
+                                            ? 'Filme, Serien, Live TV...'
+                                            : _searchController.text,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16,
+                                          color: _searchController.text.isEmpty
+                                              ? colorScheme.onSurface.withAlpha(100)
+                                              : colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_searchController.text.isNotEmpty)
+                                      GestureDetector(
+                                        onTap: () {
+                                          _searchController.clear();
+                                          _onSearchChanged('');
+                                        },
+                                        child: SvgPicture.asset(
+                                          'assets/icons/x.svg',
+                                          width: 20,
+                                          height: 20,
+                                          colorFilter: ColorFilter.mode(
+                                            colorScheme.onSurface.withAlpha(150),
+                                            BlendMode.srcIn,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              )
+                            : TextField(
+                                controller: _searchController,
+                                focusNode: _focusNode,
+                                onChanged: _onSearchChanged,
+                                onTap: _isTvDevice
+                                    ? () => setState(() => _showTvKeyboard = true)
+                                    : null,
+                                readOnly: _isTvDevice,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  color: colorScheme.onSurface,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Filme, Serien, Live TV...',
+                                  hintStyle: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    color: colorScheme.onSurface.withAlpha(100),
+                                  ),
+                                  prefixIcon: Padding(
                                     padding: const EdgeInsets.all(14),
                                     child: SvgPicture.asset(
-                                      'assets/icons/x.svg',
-                                      width: 20,
-                                      height: 20,
+                                      'assets/icons/magnifying-glass.svg',
+                                      width: 22,
+                                      height: 22,
                                       colorFilter: ColorFilter.mode(
                                         colorScheme.onSurface.withAlpha(150),
                                         BlendMode.srcIn,
                                       ),
                                     ),
                                   ),
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
-                          ),
-                        ),
+                                  suffixIcon: _searchController.text.isNotEmpty
+                                      ? GestureDetector(
+                                          onTap: () {
+                                            _searchController.clear();
+                                            _onSearchChanged('');
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(14),
+                                            child: SvgPicture.asset(
+                                              'assets/icons/x.svg',
+                                              width: 20,
+                                              height: 20,
+                                              colorFilter: ColorFilter.mode(
+                                                colorScheme.onSurface.withAlpha(150),
+                                                BlendMode.srcIn,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 16,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
+                    // TV Keyboard
+                    if (_showTvKeyboard) ...[
+                      const SizedBox(height: 16),
+                      TvKeyboard(
+                        controller: _searchController,
+                        hintText: 'Suchbegriff eingeben...',
+                        onSubmit: () {
+                          setState(() => _showTvKeyboard = false);
+                          _onSearchChanged(_searchController.text);
+                        },
+                        onClose: () {
+                          setState(() => _showTvKeyboard = false);
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
