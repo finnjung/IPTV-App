@@ -12,6 +12,7 @@ import '../widgets/section_header.dart';
 import '../widgets/responsive_grid.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
+import '../utils/tv_utils.dart';
 import 'movie_detail_screen.dart';
 
 class MoviesScreen extends StatefulWidget {
@@ -57,8 +58,10 @@ class _MoviesScreenState extends State<MoviesScreen> {
     return Scaffold(
       body: !xtreamService.isConnected
           ? SafeArea(child: _buildNotConnected(context))
-          : CustomScrollView(
-              slivers: [
+          : FocusTraversalGroup(
+              policy: FlexibleVerticalFocusTraversalPolicy(),
+              child: CustomScrollView(
+                slivers: [
                 // Sticky Glass Header
                 StickyGlassHeader(
                   title: 'Filme',
@@ -159,18 +162,32 @@ class _MoviesScreenState extends State<MoviesScreen> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: OutlinedButton(
-                          onPressed: () => setState(() => _showAllMovies = true),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(
-                              color: colorScheme.outline.withAlpha(50),
-                            ),
-                          ),
-                          child: Text(
-                            'Alle ${content.allMoviesSorted.length} Filme anzeigen',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w500,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 400),
+                            child: Focus(
+                              child: Builder(
+                                builder: (context) {
+                                  final isFocused = Focus.of(context).hasFocus;
+                                  return OutlinedButton(
+                                    onPressed: () => setState(() => _showAllMovies = true),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                      foregroundColor: Colors.white,
+                                      side: BorderSide(
+                                        color: isFocused ? Colors.white : Colors.white.withAlpha(80),
+                                        width: isFocused ? 3 : 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Alle Filme anzeigen',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -181,6 +198,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                 const SliverToBoxAdapter(child: SizedBox(height: 100)),
               ],
             ),
+          ),
     );
   }
 

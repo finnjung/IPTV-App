@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../utils/tv_utils.dart';
 import '../../screens/start_screen.dart';
 import '../../screens/live_tv_screen.dart';
 import '../../screens/movies_screen.dart';
@@ -168,24 +169,28 @@ class _MainNavigationState extends State<MainNavigation>
           return KeyEventResult.handled;
         }
       }
+      // Wenn wir im Content sind, Event NICHT behandeln - lass FocusTraversalGroup entscheiden
       return KeyEventResult.ignored;
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (!isInNav) {
-        // Wir sind im Screen-Inhalt, versuche zurück zur Navigation
-        final moved = FocusScope.of(context).focusInDirection(TraversalDirection.up);
-        if (moved) {
-          return KeyEventResult.handled;
-        } else {
-          // Fallback: Fokussiere den aktuell ausgewählten Tab
+      // Wenn wir in der Nav sind, nichts tun
+      if (isInNav) {
+        return KeyEventResult.ignored;
+      }
+
+      // Lass die FocusTraversalGroup Policy das Event verarbeiten
+      // Die Policy setzt shouldEscapeToNavBar=true wenn sie nicht weiter nach oben kann
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (FlexibleVerticalFocusTraversalPolicy.shouldEscapeToNavBar) {
+          FlexibleVerticalFocusTraversalPolicy.shouldEscapeToNavBar = false;
           final navIndex = _selectedIndex < 4 ? _selectedIndex : 0;
           _navFocusNodes[navIndex].requestFocus();
           setState(() {
             _focusedNavIndex = navIndex;
             _isSearchFocused = false;
           });
-          return KeyEventResult.handled;
         }
-      }
+      });
+
       return KeyEventResult.ignored;
     }
 

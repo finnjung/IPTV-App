@@ -400,3 +400,253 @@ class TvGridFocusTraversalPolicy extends ReadingOrderTraversalPolicy {
 
   TvGridFocusTraversalPolicy({required this.crossAxisCount});
 }
+
+/// An improved focus traversal policy that handles incomplete grid rows properly
+/// When navigating up/down, it finds the nearest element in that direction
+/// even if elements don't align geometrically (e.g., incomplete last row)
+class FlexibleVerticalFocusTraversalPolicy extends FocusTraversalPolicy
+    with DirectionalFocusTraversalPolicyMixin {
+
+  /// Static flag that signals when the policy couldn't navigate further up
+  /// MainNavigation checks this to know when to jump to the nav bar
+  static bool shouldEscapeToNavBar = false;
+
+  /// Filter nodes to only include actual interactive elements (reasonable size)
+  /// This filters out Focus wrappers (0x0 or tiny) and large containers
+  List<FocusNode> _filterContentNodes(Iterable<FocusNode> nodes) {
+    return nodes.where((node) {
+      final rect = node.rect;
+      // Filter out nodes that are too small or too large
+      // Content cards: ~130x200, Buttons: ~400x50, Small cards: ~90x90
+      // Focus wrappers are often 0x0, containers are screen-sized
+      final area = rect.width * rect.height;
+      final isNotTooSmall = area > 3000 && rect.width > 50 && rect.height > 30;
+      final isNotTooLarge = rect.width < 500 && rect.height < 400;
+      return isNotTooSmall && isNotTooLarge;
+    }).toList();
+  }
+
+  /// Groups nodes into rows based on their vertical position
+  List<List<FocusNode>> _groupIntoRows(List<FocusNode> nodes) {
+    if (nodes.isEmpty) return [];
+
+    // Sort by vertical position first
+    final sortedByY = List<FocusNode>.from(nodes);
+    sortedByY.sort((a, b) => a.rect.center.dy.compareTo(b.rect.center.dy));
+
+    final List<List<FocusNode>> rows = [];
+    List<FocusNode> currentRow = [sortedByY.first];
+    double currentRowY = sortedByY.first.rect.center.dy;
+
+    for (int i = 1; i < sortedByY.length; i++) {
+      final node = sortedByY[i];
+      final nodeY = node.rect.center.dy;
+
+      // If this node is more than 100 pixels below the current row, start a new row
+      if ((nodeY - currentRowY).abs() > 100) {
+        // Sort current row by X before adding
+        currentRow.sort((a, b) => a.rect.center.dx.compareTo(b.rect.center.dx));
+        rows.add(currentRow);
+        currentRow = [node];
+        currentRowY = nodeY;
+      } else {
+        currentRow.add(node);
+      }
+    }
+
+    // Don't forget the last row
+    if (currentRow.isNotEmpty) {
+      currentRow.sort((a, b) => a.rect.center.dx.compareTo(b.rect.center.dx));
+      rows.add(currentRow);
+    }
+
+    return rows;
+  }
+
+  @override
+  Iterable<FocusNode> sortDescendants(
+      Iterable<FocusNode> descendants, FocusNode currentNode) {
+    final List<FocusNode> sorted = descendants.toList();
+    sorted.sort((a, b) {
+      final aRect = a.rect;
+      final bRect = b.rect;
+      final rowDiff = (aRect.center.dy - bRect.center.dy).abs();
+      if (rowDiff > 100) {
+        return aRect.center.dy.compareTo(bRect.center.dy);
+      }
+      return aRect.center.dx.compareTo(bRect.center.dx);
+    });
+    return sorted;
+  }
+
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    // Reset the escape flag at the start of each navigation
+    shouldEscapeToNavBar = false;
+
+    // For horizontal navigation, use default behavior
+    if (direction == TraversalDirection.left ||
+        direction == TraversalDirection.right) {
+      return super.inDirection(currentNode, direction);
+    }
+
+    final FocusScopeNode? scope = currentNode.nearestScope;
+    if (scope == null) {
+      debugPrint('[FocusPolicy] No scope found');
+      return super.inDirection(currentNode, direction);
+    }
+
+    // Filter to only include actual content cards (nodes with reasonable size)
+    final List<FocusNode> allNodes = _filterContentNodes(scope.traversalDescendants);
+
+    // Make sure current node is included even if it didn't pass the filter
+    if (!allNodes.contains(currentNode)) {
+      allNodes.add(currentNode);
+    }
+
+    debugPrint('[FocusPolicy] Total content nodes: ${allNodes.length} (filtered from ${scope.traversalDescendants.length})');
+
+    if (allNodes.isEmpty) {
+      debugPrint('[FocusPolicy] No nodes found');
+      return super.inDirection(currentNode, direction);
+    }
+
+    // Group nodes into rows
+    final rows = _groupIntoRows(allNodes);
+    debugPrint('[FocusPolicy] Grouped into ${rows.length} rows');
+    for (int i = 0; i < rows.length; i++) {
+      debugPrint('[FocusPolicy] Row $i: ${rows[i].length} elements, Y=${rows[i].isNotEmpty ? rows[i].first.rect.center.dy.toInt() : 0}');
+    }
+
+    if (rows.isEmpty) return super.inDirection(currentNode, direction);
+
+    // Find which row the current node is in
+    int currentRowIndex = -1;
+    for (int r = 0; r < rows.length; r++) {
+      final idx = rows[r].indexOf(currentNode);
+      if (idx != -1) {
+        currentRowIndex = r;
+        break;
+      }
+    }
+
+    debugPrint('[FocusPolicy] Current node in row: $currentRowIndex, direction: $direction');
+
+    if (currentRowIndex == -1) {
+      debugPrint('[FocusPolicy] Current node not found in any row!');
+      return super.inDirection(currentNode, direction);
+    }
+
+    final currentRect = currentNode.rect;
+
+    // Navigate to the target row
+    int targetRowIndex;
+
+    // If current row is small (like a button), just go to adjacent row without any skip logic
+    if (rows[currentRowIndex].length <= 2) {
+      targetRowIndex = direction == TraversalDirection.up
+          ? currentRowIndex - 1
+          : currentRowIndex + 1;
+      debugPrint('[FocusPolicy] From small row, going directly to row $targetRowIndex');
+    } else {
+      // From a content row: skip small rows ONLY if there's a larger row beyond them
+      // This skips buttons between content sections, but allows navigating to incomplete last rows
+      if (direction == TraversalDirection.up) {
+        targetRowIndex = currentRowIndex - 1;
+        // Skip small rows only if there's a larger row above them to reach
+        while (targetRowIndex >= 0 && rows[targetRowIndex].length <= 2) {
+          // Check if there's any larger row above
+          bool hasLargerRowAbove = false;
+          for (int i = 0; i < targetRowIndex; i++) {
+            if (rows[i].length > 2) {
+              hasLargerRowAbove = true;
+              break;
+            }
+          }
+          if (hasLargerRowAbove) {
+            debugPrint('[FocusPolicy] Skipping row $targetRowIndex with only ${rows[targetRowIndex].length} elements (larger row exists above)');
+            targetRowIndex--;
+          } else {
+            // No larger row above, stop here - this is likely the top content
+            debugPrint('[FocusPolicy] Stopping at row $targetRowIndex (no larger row above)');
+            break;
+          }
+        }
+      } else {
+        targetRowIndex = currentRowIndex + 1;
+        // Skip small rows only if there's a larger row below them to reach
+        while (targetRowIndex < rows.length && rows[targetRowIndex].length <= 2) {
+          // Check if there's any larger row below
+          bool hasLargerRowBelow = false;
+          for (int i = targetRowIndex + 1; i < rows.length; i++) {
+            if (rows[i].length > 2) {
+              hasLargerRowBelow = true;
+              break;
+            }
+          }
+          if (hasLargerRowBelow) {
+            debugPrint('[FocusPolicy] Skipping row $targetRowIndex with only ${rows[targetRowIndex].length} elements (larger row exists below)');
+            targetRowIndex++;
+          } else {
+            // No larger row below, stop here - this could be the last content row or a button
+            debugPrint('[FocusPolicy] Stopping at row $targetRowIndex (no larger row below)');
+            break;
+          }
+        }
+      }
+    }
+
+    debugPrint('[FocusPolicy] Target row: $targetRowIndex');
+
+    // Check bounds
+    if (targetRowIndex < 0 || targetRowIndex >= rows.length) {
+      debugPrint('[FocusPolicy] Target row out of bounds - signaling escape to nav bar');
+      // Set flag so MainNavigation knows to jump to nav bar
+      if (direction == TraversalDirection.up) {
+        shouldEscapeToNavBar = true;
+      }
+      return false;
+    }
+
+    // If navigating UP and target row is way off-screen (Y < -500), let focus escape to nav bar
+    // This prevents getting stuck scrolling through tons of off-screen content
+    final targetRowY = rows[targetRowIndex].first.rect.center.dy;
+    if (direction == TraversalDirection.up && targetRowY < -500) {
+      debugPrint('[FocusPolicy] Target row at Y=$targetRowY is way off-screen, signaling escape to nav bar');
+      shouldEscapeToNavBar = true;
+      return false;
+    }
+
+    final targetRow = rows[targetRowIndex];
+    if (targetRow.isEmpty) {
+      debugPrint('[FocusPolicy] Target row is empty');
+      return super.inDirection(currentNode, direction);
+    }
+
+    debugPrint('[FocusPolicy] Target row has ${targetRow.length} elements');
+
+    // Find the horizontally closest element in the target row
+    FocusNode? bestNode;
+    double bestDistance = double.infinity;
+
+    for (final node in targetRow) {
+      final distance = (node.rect.center.dx - currentRect.center.dx).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestNode = node;
+      }
+    }
+
+    if (bestNode != null) {
+      final bestRect = bestNode.rect;
+      debugPrint('[FocusPolicy] Focusing node at Y=${bestRect.center.dy.toInt()}, size=${bestRect.width.toInt()}x${bestRect.height.toInt()}');
+      bestNode.requestFocus();
+      return true;
+    }
+
+    // Fallback: just take the first element in the target row
+    debugPrint('[FocusPolicy] Fallback: focusing first element in target row');
+    targetRow.first.requestFocus();
+    return true;
+  }
+}

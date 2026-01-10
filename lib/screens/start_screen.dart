@@ -13,6 +13,7 @@ import '../models/favorite.dart';
 import '../utils/content_parser.dart';
 import '../widgets/sticky_glass_header.dart';
 import '../widgets/hero_banner.dart';
+import '../utils/tv_utils.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'movie_detail_screen.dart';
@@ -63,9 +64,12 @@ class _StartScreenState extends State<StartScreen> {
     final isDesktop = _useDesktopLayout(context);
 
     return Scaffold(
-      body: CustomScrollView(
-          physics: const ClampingScrollPhysics(),
-          slivers: [
+      body: FocusTraversalGroup(
+        policy: FlexibleVerticalFocusTraversalPolicy(),
+        child: CustomScrollView(
+            cacheExtent: 2000,
+            physics: const ClampingScrollPhysics(),
+            slivers: [
             // Hero Banner (wenn Spotlight verfügbar)
             if (content?.spotlight != null)
               SliverToBoxAdapter(
@@ -98,6 +102,7 @@ class _StartScreenState extends State<StartScreen> {
                     height: 200, // Extra Platz für Fokus-Scale-Effekt
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
+                      cacheExtent: 1000,
                       clipBehavior: Clip.none,
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       itemCount: continueWatching.length,
@@ -132,6 +137,7 @@ class _StartScreenState extends State<StartScreen> {
                   height: 120,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
+                    cacheExtent: 1000,
                     clipBehavior: Clip.none,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     itemCount: favorites.length,
@@ -195,6 +201,7 @@ class _StartScreenState extends State<StartScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
+        ),
     );
   }
 
@@ -357,6 +364,7 @@ class _StartScreenState extends State<StartScreen> {
           height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            cacheExtent: 1000,
             clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: allCurated.take(20).length,
@@ -391,6 +399,7 @@ class _StartScreenState extends State<StartScreen> {
           height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            cacheExtent: 1000,
             clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.curatedKids.length,
@@ -427,6 +436,7 @@ class _StartScreenState extends State<StartScreen> {
           height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            cacheExtent: 1000,
             clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.thrillerSeries.length,
@@ -461,6 +471,7 @@ class _StartScreenState extends State<StartScreen> {
           height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            cacheExtent: 1000,
             clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.actionMovies.length,
@@ -496,6 +507,7 @@ class _StartScreenState extends State<StartScreen> {
           height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            cacheExtent: 1000,
             clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.allMovies.length,
@@ -531,6 +543,7 @@ class _StartScreenState extends State<StartScreen> {
           height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            cacheExtent: 1000,
             clipBehavior: Clip.none,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.allSeries.length,
@@ -591,12 +604,24 @@ class _MovieCardState extends State<_MovieCard>
       _scaleController.forward();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
+          // First ensure visible call
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
+          // Second call after delay to handle nested scrollables
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: 0.5,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          });
         }
       });
     } else {
@@ -825,9 +850,19 @@ class _SeriesCardState extends State<_SeriesCard>
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: 0.5,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          });
         }
       });
     } else {
@@ -1058,9 +1093,19 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard>
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: 0.5,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          });
         }
       });
     } else {
@@ -1483,9 +1528,19 @@ class _FavoriteCardState extends State<_FavoriteCard>
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
           );
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: 0.5,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          });
         }
       });
     } else {

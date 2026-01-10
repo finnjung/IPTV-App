@@ -12,6 +12,7 @@ import '../widgets/section_header.dart';
 import '../widgets/responsive_grid.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
+import '../utils/tv_utils.dart';
 import 'series_detail_screen.dart';
 
 class SeriesScreen extends StatefulWidget {
@@ -57,129 +58,146 @@ class _SeriesScreenState extends State<SeriesScreen> {
     return Scaffold(
       body: !xtreamService.isConnected
           ? SafeArea(child: _buildNotConnected(context))
-          : CustomScrollView(
-              slivers: [
-                // Sticky Glass Header
-                StickyGlassHeader(
-                  title: 'Serien',
-                  subtitle: isLoading
-                      ? 'Laden...'
-                      : '${content?.allSeriesSorted.length ?? 0} Serien verfugbar',
-                  iconPath: 'assets/icons/monitor-play.svg',
-                ),
+          : FocusTraversalGroup(
+              policy: FlexibleVerticalFocusTraversalPolicy(),
+              child: CustomScrollView(
+                slivers: [
+                  // Sticky Glass Header
+                  StickyGlassHeader(
+                    title: 'Serien',
+                    subtitle: isLoading
+                        ? 'Laden...'
+                        : '${content?.allSeriesSorted.length ?? 0} Serien verfugbar',
+                    iconPath: 'assets/icons/monitor-play.svg',
+                  ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-                // Loading
-                if (isLoading || content == null)
-                  const SliverToBoxAdapter(
-                    child: Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(40),
-                        child: CircularProgressIndicator(),
+                  // Loading
+                  if (isLoading || content == null)
+                    const SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(),
+                        ),
                       ),
-                    ),
-                  )
-                else if (content.isEmpty)
-                  SliverToBoxAdapter(child: _buildEmptyState(colorScheme))
-                else ...[
-                  // Pseudo-Category Sections
-                  for (final category in content.categories) ...[
+                    )
+                  else if (content.isEmpty)
+                    SliverToBoxAdapter(child: _buildEmptyState(colorScheme))
+                  else ...[
+                    // Pseudo-Category Sections
+                    for (final category in content.categories) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                          child: SectionHeader(
+                            title: category.title,
+                            icon: category.icon,
+                          ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 220, // Extra Platz für Fokus-Scale-Effekt
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            clipBehavior: Clip.none,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            itemCount: category.items.length,
+                            itemBuilder: (context, index) {
+                              final series = category.items[index];
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  right: index < category.items.length - 1 ? 12 : 0,
+                                ),
+                                child: _SeriesCard(
+                                  series: series,
+                                  onTap: () => _openSeries(series),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    // All Series Section Header
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                        padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
                         child: SectionHeader(
-                          title: category.title,
-                          icon: category.icon,
+                          title: 'Alle Serien (A-Z)',
+                          icon: 'assets/icons/list.svg',
+                          onSeeAll: _showAllSeries
+                              ? null
+                              : () => setState(() => _showAllSeries = true),
                         ),
                       ),
                     ),
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: 220, // Extra Platz für Fokus-Scale-Effekt
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          clipBehavior: Clip.none,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          itemCount: category.items.length,
-                          itemBuilder: (context, index) {
-                            final series = category.items[index];
-                            return Padding(
-                              padding: EdgeInsets.only(
-                                right: index < category.items.length - 1 ? 12 : 0,
-                              ),
-                              child: _SeriesCard(
-                                series: series,
-                                onTap: () => _openSeries(series),
-                              ),
-                            );
-                          },
-                        ),
+
+                    // All Series Grid
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: ResponsiveSliverGrid(
+                        itemCount: _showAllSeries
+                            ? content.allSeriesSorted.length
+                            : content.allSeriesSorted.length.clamp(0, 20),
+                        childAspectRatio: 0.7,
+                        itemBuilder: (context, index) {
+                          final series = content.allSeriesSorted[index];
+                          return ContentCard(
+                            title: series.name ?? 'Unbekannt',
+                            subtitle: series.year,
+                            imageUrl: series.cover,
+                            icon: 'assets/icons/monitor-play.svg',
+                            onTap: () => _openSeries(series),
+                          );
+                        },
                       ),
                     ),
+
+                    // Show more button
+                    if (!_showAllSeries && content.allSeriesSorted.length > 20)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 400),
+                              child: Focus(
+                                child: Builder(
+                                  builder: (context) {
+                                    final isFocused = Focus.of(context).hasFocus;
+                                    return OutlinedButton(
+                                      onPressed: () => setState(() => _showAllSeries = true),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                        foregroundColor: Colors.white,
+                                        side: BorderSide(
+                                          color: isFocused ? Colors.white : Colors.white.withAlpha(80),
+                                          width: isFocused ? 3 : 1,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Alle Serien anzeigen',
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
 
-                  // All Series Section Header
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-                      child: SectionHeader(
-                        title: 'Alle Serien (A-Z)',
-                        icon: 'assets/icons/list.svg',
-                        onSeeAll: _showAllSeries
-                            ? null
-                            : () => setState(() => _showAllSeries = true),
-                      ),
-                    ),
-                  ),
-
-                  // All Series Grid
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: ResponsiveSliverGrid(
-                      itemCount: _showAllSeries
-                          ? content.allSeriesSorted.length
-                          : content.allSeriesSorted.length.clamp(0, 20),
-                      childAspectRatio: 0.7,
-                      itemBuilder: (context, index) {
-                        final series = content.allSeriesSorted[index];
-                        return ContentCard(
-                          title: series.name ?? 'Unbekannt',
-                          subtitle: series.year,
-                          imageUrl: series.cover,
-                          icon: 'assets/icons/monitor-play.svg',
-                          onTap: () => _openSeries(series),
-                        );
-                      },
-                    ),
-                  ),
-
-                  // Show more button
-                  if (!_showAllSeries && content.allSeriesSorted.length > 20)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: OutlinedButton(
-                          onPressed: () => setState(() => _showAllSeries = true),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(
-                              color: colorScheme.outline.withAlpha(50),
-                            ),
-                          ),
-                          child: Text(
-                            'Alle ${content.allSeriesSorted.length} Serien anzeigen',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
-
-                const SliverToBoxAdapter(child: SizedBox(height: 100)),
-              ],
+              ),
             ),
     );
   }
