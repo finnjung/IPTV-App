@@ -66,6 +66,9 @@ class XtreamService extends ChangeNotifier {
   // Player Buffer Mode: 'live', 'balanced', 'stable'
   String _bufferMode = 'balanced';
 
+  // Suchhistorie - letzte Suchanfragen
+  List<String> _searchHistory = [];
+
   // Cached Start Screen Content
   StartScreenContent? _startScreenContent;
   bool _isLoadingStartScreen = false;
@@ -97,6 +100,7 @@ class XtreamService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get preferredLanguage => _preferredLanguage;
   String get bufferMode => _bufferMode;
+  List<String> get searchHistory => List.unmodifiable(_searchHistory);
   String? get error => _error;
   XtreamCredentials? get credentials => _credentials;
   XTremeCodeGeneralInformation? get serverInfo => _serverInfo;
@@ -154,6 +158,9 @@ class XtreamService extends ChangeNotifier {
 
     // Favoriten laden
     await _loadFavorites();
+
+    // Suchhistorie laden
+    await _loadSearchHistory();
 
     // Bevorzugte Sprache laden
     _preferredLanguage = prefs.getString('preferred_language');
@@ -881,6 +888,65 @@ class XtreamService extends ChangeNotifier {
     _favorites.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('favorites');
+    notifyListeners();
+  }
+
+  // ==================== Suchhistorie ====================
+
+  /// Lädt die gespeicherte Suchhistorie
+  Future<void> _loadSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _searchHistory = prefs.getStringList('search_history') ?? [];
+      debugPrint('Loaded ${_searchHistory.length} search history entries');
+    } catch (e) {
+      debugPrint('Error loading search history: $e');
+      _searchHistory = [];
+    }
+  }
+
+  /// Speichert die Suchhistorie
+  Future<void> _saveSearchHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('search_history', _searchHistory);
+    } catch (e) {
+      debugPrint('Error saving search history: $e');
+    }
+  }
+
+  /// Fügt einen Suchbegriff zur Historie hinzu (max 5 Einträge)
+  Future<void> addToSearchHistory(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.length < 2) return;
+
+    // Entferne den Begriff falls er schon existiert (um ihn nach oben zu verschieben)
+    _searchHistory.remove(trimmed);
+
+    // Füge am Anfang hinzu
+    _searchHistory.insert(0, trimmed);
+
+    // Beschränke auf 5 Einträge
+    if (_searchHistory.length > 5) {
+      _searchHistory = _searchHistory.take(5).toList();
+    }
+
+    await _saveSearchHistory();
+    notifyListeners();
+  }
+
+  /// Entfernt einen einzelnen Eintrag aus der Suchhistorie
+  Future<void> removeFromSearchHistory(String query) async {
+    _searchHistory.remove(query);
+    await _saveSearchHistory();
+    notifyListeners();
+  }
+
+  /// Löscht die gesamte Suchhistorie
+  Future<void> clearSearchHistory() async {
+    _searchHistory.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('search_history');
     notifyListeners();
   }
 

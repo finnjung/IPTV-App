@@ -122,6 +122,11 @@ class _SearchScreenState extends State<SearchScreen> {
         _results = results;
         _isSearching = false;
       });
+
+      // Zur Suchhistorie hinzufügen wenn Ergebnisse gefunden wurden
+      if (!results.isEmpty) {
+        xtreamService.addToSearchHistory(query);
+      }
     }
   }
 
@@ -388,9 +393,32 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildDiscoveryContentScrollable(ColorScheme colorScheme, double topPadding) {
+    final xtreamService = context.watch<XtreamService>();
+    final searchHistory = xtreamService.searchHistory;
+
     return ListView(
       padding: EdgeInsets.only(top: topPadding, bottom: 40),
       children: [
+        // Search History (mit Animation beim Ausblenden)
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                axisAlignment: -1.0,
+                child: child,
+              ),
+            );
+          },
+          child: searchHistory.isNotEmpty
+              ? _buildSearchHistorySection(colorScheme, searchHistory)
+              : const SizedBox.shrink(key: ValueKey('empty')),
+        ),
+
         // Quick Search Chips
         _buildQuickSearchSection(colorScheme),
 
@@ -412,6 +440,105 @@ class _SearchScreenState extends State<SearchScreen> {
             _buildSuggestedSeries(),
           ),
       ],
+    );
+  }
+
+  Widget _buildSearchHistorySection(ColorScheme colorScheme, List<String> history) {
+    return Padding(
+      key: const ValueKey('search_history'),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SvgPicture.asset(
+                'assets/icons/clock-counter-clockwise.svg',
+                width: 18,
+                height: 18,
+                colorFilter: ColorFilter.mode(
+                  colorScheme.onSurface.withAlpha(150),
+                  BlendMode.srcIn,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Zuletzt gesucht',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  context.read<XtreamService>().clearSearchHistory();
+                },
+                child: Text(
+                  'Löschen',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: history.map((term) {
+              return GestureDetector(
+                onTap: () {
+                  _searchController.text = term;
+                  _onSearchChanged(term);
+                },
+                child: Container(
+                  padding: const EdgeInsets.only(left: 14, right: 6, top: 8, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        term,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () {
+                          context.read<XtreamService>().removeFromSearchHistory(term);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          child: SvgPicture.asset(
+                            'assets/icons/x.svg',
+                            width: 12,
+                            height: 12,
+                            colorFilter: ColorFilter.mode(
+                              colorScheme.onSurface.withAlpha(100),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
