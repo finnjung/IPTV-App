@@ -66,6 +66,9 @@ class _MainNavigationState extends State<MainNavigation>
       vsync: this,
     );
     _slideLineController.forward();
+
+    // Start-Tab FocusNode für Navigation vom Play-Button registrieren
+    HeroBannerFocus.startTabFocusNode = _navFocusNodes[0];
   }
 
   @override
@@ -77,6 +80,8 @@ class _MainNavigationState extends State<MainNavigation>
     for (final node in _navFocusNodes) {
       node.dispose();
     }
+    // FocusNode-Referenz aufräumen
+    HeroBannerFocus.startTabFocusNode = null;
     super.dispose();
   }
 
@@ -107,10 +112,24 @@ class _MainNavigationState extends State<MainNavigation>
           // Zwischen Tabs navigieren
           _focusedNavIndex--;
           _navFocusNodes[_focusedNavIndex].requestFocus();
+        } else if (_focusedNavIndex == 0 && _selectedIndex == 0) {
+          // Von Start-Tab zum HeroBanner Play-Button (nur auf Start-Screen)
+          if (HeroBannerFocus.hasPlayButton) {
+            HeroBannerFocus.requestPlayButtonFocus();
+          }
         }
       });
       return KeyEventResult.handled;
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      // Vom Play-Button zurück zum Start-Tab
+      if (_selectedIndex == 0 && HeroBannerFocus.playButtonFocusNode?.hasFocus == true) {
+        _navFocusNodes[0].requestFocus();
+        setState(() {
+          _focusedNavIndex = 0;
+          _isSearchFocused = false;
+        });
+        return KeyEventResult.handled;
+      }
       if (!isInNav) return KeyEventResult.ignored; // Event an Content weitergeben
 
       setState(() {

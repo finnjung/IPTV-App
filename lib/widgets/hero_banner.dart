@@ -348,9 +348,18 @@ class _QualityChip extends StatelessWidget {
 class HeroBannerFocus {
   static FocusNode? playButtonFocusNode;
 
+  /// FocusNode des Start-Tabs (wird von MainNavigation gesetzt)
+  static FocusNode? startTabFocusNode;
+
   static void requestPlayButtonFocus() {
     if (playButtonFocusNode != null && playButtonFocusNode!.canRequestFocus) {
       playButtonFocusNode!.requestFocus();
+    }
+  }
+
+  static void requestStartTabFocus() {
+    if (startTabFocusNode != null && startTabFocusNode!.canRequestFocus) {
+      startTabFocusNode!.requestFocus();
     }
   }
 
@@ -383,7 +392,7 @@ class _PlayButtonState extends State<_PlayButton>
       duration: const Duration(milliseconds: 150),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.03).animate(
       CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
     );
   }
@@ -419,24 +428,22 @@ class _PlayButtonState extends State<_PlayButton>
     }
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.space) {
-        widget.onPressed?.call();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Focus(
       focusNode: _focusNode,
       onFocusChange: _handleFocusChange,
-      onKeyEvent: _handleKeyEvent,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            widget.onPressed?.call();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: GestureDetector(
         onTap: widget.onPressed,
         child: AnimatedBuilder(
@@ -449,15 +456,15 @@ class _PlayButtonState extends State<_PlayButton>
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: BoxDecoration(
-              color: _isFocused ? Colors.white : Colors.white,
+              color: _isFocused ? Colors.black.withAlpha(128) : Colors.white,
               borderRadius: BorderRadius.circular(6),
               border: _isFocused
-                  ? Border.all(color: Colors.amber, width: 3)
+                  ? Border.all(color: Colors.white, width: 3)
                   : null,
               boxShadow: _isFocused
                   ? [
                       BoxShadow(
-                        color: Colors.amber.withAlpha(100),
+                        color: Colors.white.withAlpha(100),
                         blurRadius: 16,
                         spreadRadius: 2,
                       ),
@@ -467,9 +474,9 @@ class _PlayButtonState extends State<_PlayButton>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.play_arrow_rounded,
-                  color: Colors.black,
+                  color: _isFocused ? Colors.white : Colors.black,
                   size: 28,
                 ),
                 const SizedBox(width: 6),
@@ -478,7 +485,7 @@ class _PlayButtonState extends State<_PlayButton>
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black,
+                    color: _isFocused ? Colors.white : Colors.black,
                   ),
                 ),
               ],
