@@ -573,25 +573,48 @@ class _MovieCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Quality Tag
-              if (metadata.quality != null)
+              // Quality + Language Badges
+              if (metadata.quality != null || metadata.language != null)
                 Positioned(
                   top: 6,
                   left: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      metadata.quality!,
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                  right: 6,
+                  child: Row(
+                    children: [
+                      if (metadata.quality != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      if (metadata.language != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.language!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               // Title at bottom
@@ -695,25 +718,48 @@ class _SeriesCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Quality Tag
-              if (metadata.quality != null)
+              // Quality + Language Badges
+              if (metadata.quality != null || metadata.language != null)
                 Positioned(
                   top: 6,
                   left: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      metadata.quality!,
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                  right: 6,
+                  child: Row(
+                    children: [
+                      if (metadata.quality != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      if (metadata.language != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.language!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               // Title at bottom

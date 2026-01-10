@@ -2019,20 +2019,13 @@ class _PlayerScreenState extends State<PlayerScreen>
           if (contentId != null)
             IconButton(
               onPressed: () => _toggleFavorite(xtreamService),
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(30),
-                  shape: BoxShape.circle,
-                ),
-                child: SvgPicture.asset(
-                  isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
-                  width: 20,
-                  height: 20,
-                  colorFilter: const ColorFilter.mode(
-                    Colors.white,
-                    BlendMode.srcIn,
-                  ),
+              icon: SvgPicture.asset(
+                isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                width: 24,
+                height: 24,
+                colorFilter: const ColorFilter.mode(
+                  Colors.white,
+                  BlendMode.srcIn,
                 ),
               ),
             ),

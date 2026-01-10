@@ -356,25 +356,49 @@ class _MovieCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Tags (top left)
-              if (metadata.quality != null)
+              // Tags (top left) - Quality + Language
+              if (metadata.quality != null || metadata.language != null)
                 Positioned(
                   top: 6,
                   left: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      metadata.quality!,
-                      style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                  right: 40, // Platz für Favoriten-Button
+                  child: Row(
+                    children: [
+                      if (metadata.quality != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.quality!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      if (metadata.quality != null && metadata.language != null)
+                        const SizedBox(width: 4),
+                      if (metadata.language != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            metadata.language!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               // Title at bottom
