@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -94,10 +95,11 @@ class _StartScreenState extends State<StartScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    height: 180,
+                    height: 200, // Extra Platz für Fokus-Scale-Effekt
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      clipBehavior: Clip.none,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       itemCount: continueWatching.length,
                       itemBuilder: (context, index) {
                         final item = continueWatching[index];
@@ -320,10 +322,11 @@ class _StartScreenState extends State<StartScreen> {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 200,
+          height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: allCurated.take(20).length,
             itemBuilder: (context, index) {
               final item = allCurated[index];
@@ -353,10 +356,11 @@ class _StartScreenState extends State<StartScreen> {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 200,
+          height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.curatedKids.length,
             itemBuilder: (context, index) {
               final item = content.curatedKids[index];
@@ -388,10 +392,11 @@ class _StartScreenState extends State<StartScreen> {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 200,
+          height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.thrillerSeries.length,
             itemBuilder: (context, index) {
               final series = content.thrillerSeries[index];
@@ -421,10 +426,11 @@ class _StartScreenState extends State<StartScreen> {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 200,
+          height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.actionMovies.length,
             itemBuilder: (context, index) {
               final movie = content.actionMovies[index];
@@ -455,10 +461,11 @@ class _StartScreenState extends State<StartScreen> {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 200,
+          height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.allMovies.length,
             itemBuilder: (context, index) {
               final movie = content.allMovies[index];
@@ -489,10 +496,11 @@ class _StartScreenState extends State<StartScreen> {
       ),
       SliverToBoxAdapter(
         child: SizedBox(
-          height: 200,
+          height: 220, // Extra Platz für Fokus-Scale-Effekt
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            clipBehavior: Clip.none,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             itemCount: content.allSeries.length,
             itemBuilder: (context, index) {
               final series = content.allSeries[index];
@@ -510,130 +518,216 @@ class _StartScreenState extends State<StartScreen> {
   }
 }
 
-class _MovieCard extends StatelessWidget {
+class _MovieCard extends StatefulWidget {
   final XTremeCodeVodItem movie;
 
   const _MovieCard({required this.movie});
 
   @override
+  State<_MovieCard> createState() => _MovieCardState();
+}
+
+class _MovieCardState extends State<_MovieCard>
+    with SingleTickerProviderStateMixin {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  void _navigateToDetail() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MovieDetailScreen(movie: widget.movie),
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        _navigateToDetail();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final metadata = ContentParser.parse(movie.name ?? '');
+    final metadata = ContentParser.parse(widget.movie.name ?? '');
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MovieDetailScreen(movie: movie),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: _navigateToDetail,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           ),
-        );
-      },
-      child: Container(
-        width: 130,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: Stack(
-            children: [
-              // Full-size image
-              Positioned.fill(
-                child: Container(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  child: movie.streamIcon != null
-                      ? CachedNetworkImage(
-                          imageUrl: movie.streamIcon!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                        )
-                      : _buildPlaceholder(colorScheme),
-                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 130,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
               ),
-              // Gradient overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withAlpha(100),
-                        Colors.black.withAlpha(200),
-                        Colors.black.withAlpha(230),
-                      ],
-                      stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(40),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                children: [
+                  // Full-size image
+                  Positioned.fill(
+                    child: Container(
+                      color: colorScheme.onSurface.withAlpha(10),
+                      child: widget.movie.streamIcon != null
+                          ? CachedNetworkImage(
+                              imageUrl: widget.movie.streamIcon!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                            )
+                          : _buildPlaceholder(colorScheme),
                     ),
                   ),
-                ),
-              ),
-              // Quality + Language Badges
-              if (metadata.quality != null || metadata.language != null)
-                Positioned(
-                  top: 6,
-                  left: 6,
-                  right: 6,
-                  child: Row(
-                    children: [
-                      if (metadata.quality != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
+                  // Gradient overlay
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withAlpha(100),
+                            Colors.black.withAlpha(200),
+                            Colors.black.withAlpha(230),
+                          ],
+                          stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
                         ),
-                      const Spacer(),
-                      if (metadata.language != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.language!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  // Quality + Language Badges
+                  if (metadata.quality != null || metadata.language != null)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      right: 6,
+                      child: Row(
+                        children: [
+                          if (metadata.quality != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.quality!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                          const Spacer(),
+                          if (metadata.language != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.language!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  // Title at bottom
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: Text(
+                      metadata.cleanName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              // Title at bottom
-              Positioned(
-                left: 8,
-                right: 8,
-                bottom: 8,
-                child: Text(
-                  metadata.cleanName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -655,130 +749,216 @@ class _MovieCard extends StatelessWidget {
   }
 }
 
-class _SeriesCard extends StatelessWidget {
+class _SeriesCard extends StatefulWidget {
   final XTremeCodeSeriesItem series;
 
   const _SeriesCard({required this.series});
 
   @override
+  State<_SeriesCard> createState() => _SeriesCardState();
+}
+
+class _SeriesCardState extends State<_SeriesCard>
+    with SingleTickerProviderStateMixin {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  void _navigateToDetail() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SeriesDetailScreen(series: widget.series),
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        _navigateToDetail();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final metadata = ContentParser.parse(series.name ?? '');
+    final metadata = ContentParser.parse(widget.series.name ?? '');
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SeriesDetailScreen(series: series),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: _navigateToDetail,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           ),
-        );
-      },
-      child: Container(
-        width: 130,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: Stack(
-            children: [
-              // Full-size image
-              Positioned.fill(
-                child: Container(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  child: series.cover != null
-                      ? CachedNetworkImage(
-                          imageUrl: series.cover!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                        )
-                      : _buildPlaceholder(colorScheme),
-                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 130,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
               ),
-              // Gradient overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withAlpha(100),
-                        Colors.black.withAlpha(200),
-                        Colors.black.withAlpha(230),
-                      ],
-                      stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(40),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                children: [
+                  // Full-size image
+                  Positioned.fill(
+                    child: Container(
+                      color: colorScheme.onSurface.withAlpha(10),
+                      child: widget.series.cover != null
+                          ? CachedNetworkImage(
+                              imageUrl: widget.series.cover!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                            )
+                          : _buildPlaceholder(colorScheme),
                     ),
                   ),
-                ),
-              ),
-              // Quality + Language Badges
-              if (metadata.quality != null || metadata.language != null)
-                Positioned(
-                  top: 6,
-                  left: 6,
-                  right: 6,
-                  child: Row(
-                    children: [
-                      if (metadata.quality != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
+                  // Gradient overlay
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withAlpha(100),
+                            Colors.black.withAlpha(200),
+                            Colors.black.withAlpha(230),
+                          ],
+                          stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
                         ),
-                      const Spacer(),
-                      if (metadata.language != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.language!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  // Quality + Language Badges
+                  if (metadata.quality != null || metadata.language != null)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      right: 6,
+                      child: Row(
+                        children: [
+                          if (metadata.quality != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.quality!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                          const Spacer(),
+                          if (metadata.language != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.language!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  // Title at bottom
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: Text(
+                      metadata.cleanName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              // Title at bottom
-              Positioned(
-                left: 8,
-                right: 8,
-                bottom: 8,
-                child: Text(
-                  metadata.cleanName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -800,163 +980,252 @@ class _SeriesCard extends StatelessWidget {
   }
 }
 
-class _ContinueWatchingCard extends StatelessWidget {
+class _ContinueWatchingCard extends StatefulWidget {
   final WatchProgress item;
+  final bool autofocus;
 
-  const _ContinueWatchingCard({required this.item});
+  const _ContinueWatchingCard({required this.item, this.autofocus = false});
+
+  @override
+  State<_ContinueWatchingCard> createState() => _ContinueWatchingCardState();
+}
+
+class _ContinueWatchingCardState extends State<_ContinueWatchingCard>
+    with SingleTickerProviderStateMixin {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      // Smooth scroll zur fokussierten Card
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  void _navigateToPlayer() {
+    final cleanTitle = ContentParser.parse(widget.item.title).cleanName;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayerScreen(
+          title: cleanTitle,
+          subtitle: widget.item.subtitle,
+          streamUrl: widget.item.streamUrl,
+          contentId: widget.item.id,
+          imageUrl: widget.item.imageUrl,
+          contentType: widget.item.contentType,
+        ),
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        _navigateToPlayer();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    // Clean the title in case it was saved before the parser was improved
-    final cleanTitle = ContentParser.parse(item.title).cleanName;
+    final cleanTitle = ContentParser.parse(widget.item.title).cleanName;
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PlayerScreen(
-              title: cleanTitle,
-              subtitle: item.subtitle,
-              streamUrl: item.streamUrl,
-              contentId: item.id,
-              imageUrl: item.imageUrl,
-              contentType: item.contentType,
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: _navigateToPlayer,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 260,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
+              ),
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(40),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
             ),
-          ),
-        );
-      },
-      child: Container(
-        width: 260,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: Stack(
-            children: [
-              // Full-size image
-              Positioned.fill(
-                child: Container(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  child: item.imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: item.imageUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                        )
-                      : _buildPlaceholder(colorScheme),
-                ),
-              ),
-              // Gradient overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withAlpha(80),
-                        Colors.black.withAlpha(180),
-                        Colors.black.withAlpha(220),
-                      ],
-                      stops: const [0.0, 0.4, 0.7, 1.0],
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                children: [
+                  // Full-size image
+                  Positioned.fill(
+                    child: Container(
+                      color: colorScheme.onSurface.withAlpha(10),
+                      child: widget.item.imageUrl != null
+                          ? CachedNetworkImage(
+                              imageUrl: widget.item.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                            )
+                          : _buildPlaceholder(colorScheme),
                     ),
                   ),
-                ),
-              ),
-              // Play Button
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 60,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withAlpha(120),
-                      shape: BoxShape.circle,
-                    ),
-                    child: SvgPicture.asset(
-                      'assets/icons/play.svg',
-                      width: 24,
-                      height: 24,
-                      colorFilter: const ColorFilter.mode(
-                        Colors.white,
-                        BlendMode.srcIn,
+                  // Gradient overlay
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withAlpha(80),
+                            Colors.black.withAlpha(180),
+                            Colors.black.withAlpha(220),
+                          ],
+                          stops: const [0.0, 0.4, 0.7, 1.0],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              // Info at bottom
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      cleanTitle,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                  // Play Button
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 60,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(120),
+                          shape: BoxShape.circle,
+                        ),
+                        child: SvgPicture.asset(
+                          'assets/icons/play.svg',
+                          width: 24,
+                          height: 24,
+                          colorFilter: const ColorFilter.mode(
+                            Colors.white,
+                            BlendMode.srcIn,
+                          ),
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
+                  ),
+                  // Info at bottom
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (item.subtitle != null) ...[
-                          Expanded(
-                            child: Text(
-                              item.subtitle!,
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.white.withAlpha(180),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
                         Text(
-                          item.remainingTime,
+                          cleanTitle,
                           style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: Colors.white.withAlpha(150),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (widget.item.subtitle != null) ...[
+                              Expanded(
+                                child: Text(
+                                  widget.item.subtitle!,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.white.withAlpha(180),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(
+                              widget.item.remainingTime,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.white.withAlpha(150),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              // Progress Bar
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: LinearProgressIndicator(
-                  value: item.progress,
-                  backgroundColor: Colors.black38,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    colorScheme.primary,
                   ),
-                  minHeight: 3,
-                ),
+                  // Progress Bar
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: LinearProgressIndicator(
+                      value: widget.item.progress,
+                      backgroundColor: Colors.black38,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        colorScheme.primary,
+                      ),
+                      minHeight: 3,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -968,7 +1237,7 @@ class _ContinueWatchingCard extends StatelessWidget {
       color: colorScheme.onSurface.withAlpha(10),
       child: Center(
         child: SvgPicture.asset(
-          item.contentType == ContentType.movie
+          widget.item.contentType == ContentType.movie
               ? 'assets/icons/film-strip.svg'
               : 'assets/icons/monitor-play.svg',
           width: 32,
@@ -1008,7 +1277,7 @@ class _AnimatedFavoritesSection extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  height: 80,
+                  height: 100, // Extra Platz für Fokus-Scale-Effekt
                   child: _AnimatedFavoritesList(favorites: favorites),
                 ),
                 const SizedBox(height: 12),
@@ -1107,7 +1376,8 @@ class _AnimatedFavoritesListState extends State<_AnimatedFavoritesList> {
     return AnimatedList(
       key: _listKey,
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      clipBehavior: Clip.none, // Verhindert Clipping bei Fokus-Scale
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       initialItemCount: _internalList.length,
       itemBuilder: (context, index, animation) {
         final favorite = _internalList[index];
@@ -1132,122 +1402,207 @@ class _AnimatedFavoritesListState extends State<_AnimatedFavoritesList> {
   }
 }
 
-class _FavoriteCard extends StatelessWidget {
+class _FavoriteCard extends StatefulWidget {
   final Favorite favorite;
   final VoidCallback onRemove;
 
   const _FavoriteCard({required this.favorite, required this.onRemove});
 
   @override
+  State<_FavoriteCard> createState() => _FavoriteCardState();
+}
+
+class _FavoriteCardState extends State<_FavoriteCard>
+    with SingleTickerProviderStateMixin {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        final xtreamService = context.read<XtreamService>();
+        _navigateToContent(context, xtreamService);
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.read<XtreamService>();
 
-    return GestureDetector(
-      onTap: () => _navigateToContent(context, xtreamService),
-      child: Container(
-        width: 220,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: () => _navigateToContent(context, xtreamService),
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           ),
-        ),
-        child: Row(
-          children: [
-            // Small image/icon on the left
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: colorScheme.onSurface.withAlpha(15),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(13),
-                  bottomLeft: Radius.circular(13),
-                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 220,
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
               ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(13),
-                  bottomLeft: Radius.circular(13),
-                ),
-                child: favorite.imageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: favorite.imageUrl!,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                      )
-                    : _buildPlaceholder(colorScheme),
-              ),
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(40),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
             ),
-            // Content on the right
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Top row: Badge + Heart
-                    Row(
+            child: Row(
+              children: [
+                // Small image/icon on the left
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withAlpha(15),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      bottomLeft: Radius.circular(12),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      bottomLeft: Radius.circular(12),
+                    ),
+                    child: widget.favorite.imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: widget.favorite.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                          )
+                        : _buildPlaceholder(colorScheme),
+                  ),
+                ),
+                // Content on the right
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _getTypeColor(),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            _getTypeLabel(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                        // Top row: Badge + Heart
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _getTypeColor(),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _getTypeLabel(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: widget.onRemove,
+                              child: SvgPicture.asset(
+                                'assets/icons/heart-fill.svg',
+                                width: 18,
+                                height: 18,
+                                colorFilter: ColorFilter.mode(
+                                  colorScheme.onSurface.withAlpha(150),
+                                  BlendMode.srcIn,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: onRemove,
-                          child: SvgPicture.asset(
-                            'assets/icons/heart-fill.svg',
-                            width: 18,
-                            height: 18,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface.withAlpha(150),
-                              BlendMode.srcIn,
+                        const SizedBox(height: 6),
+                        // Title
+                        Expanded(
+                          child: Text(
+                            ContentParser.parse(widget.favorite.title).cleanName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                              height: 1.2,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    // Title
-                    Expanded(
-                      child: Text(
-                        ContentParser.parse(favorite.title).cleanName,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                          height: 1.2,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Color _getTypeColor() {
-    switch (favorite.contentType) {
+    switch (widget.favorite.contentType) {
       case ContentType.movie:
         return Colors.blue.shade700;
       case ContentType.series:
@@ -1258,7 +1613,7 @@ class _FavoriteCard extends StatelessWidget {
   }
 
   String _getTypeLabel() {
-    switch (favorite.contentType) {
+    switch (widget.favorite.contentType) {
       case ContentType.movie:
         return 'Film';
       case ContentType.series:
@@ -1269,18 +1624,18 @@ class _FavoriteCard extends StatelessWidget {
   }
 
   void _navigateToContent(BuildContext context, XtreamService xtreamService) {
-    switch (favorite.contentType) {
+    switch (widget.favorite.contentType) {
       case ContentType.movie:
         // Navigate to movie detail screen using MovieDetailScreenFromFavorite
-        if (favorite.streamId != null) {
+        if (widget.favorite.streamId != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => MovieDetailScreenFromFavorite(
-                streamId: favorite.streamId!,
-                movieTitle: favorite.title,
-                moviePoster: favorite.imageUrl,
-                containerExtension: favorite.extension,
+                streamId: widget.favorite.streamId!,
+                movieTitle: widget.favorite.title,
+                moviePoster: widget.favorite.imageUrl,
+                containerExtension: widget.favorite.extension,
               ),
             ),
           );
@@ -1288,14 +1643,14 @@ class _FavoriteCard extends StatelessWidget {
         break;
       case ContentType.series:
         // Navigate to series detail using SeriesDetailScreenFromFavorite
-        if (favorite.seriesId != null) {
+        if (widget.favorite.seriesId != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => SeriesDetailScreenFromFavorite(
-                seriesId: favorite.seriesId!,
-                seriesName: favorite.title,
-                seriesCover: favorite.imageUrl,
+                seriesId: widget.favorite.seriesId!,
+                seriesName: widget.favorite.title,
+                seriesCover: widget.favorite.imageUrl,
               ),
             ),
           );
@@ -1304,7 +1659,7 @@ class _FavoriteCard extends StatelessWidget {
       case ContentType.live:
         // Use direct URL generation for live streams
         final streamUrl = xtreamService.client?.streamUrl(
-          favorite.streamId ?? 0,
+          widget.favorite.streamId ?? 0,
           ['ts', 'm3u8'],
         );
         if (streamUrl != null) {
@@ -1312,10 +1667,10 @@ class _FavoriteCard extends StatelessWidget {
             context,
             MaterialPageRoute(
               builder: (context) => PlayerScreen(
-                title: ContentParser.parse(favorite.title).cleanName,
+                title: ContentParser.parse(widget.favorite.title).cleanName,
                 streamUrl: streamUrl,
-                contentId: favorite.id,
-                imageUrl: favorite.imageUrl,
+                contentId: widget.favorite.id,
+                imageUrl: widget.favorite.imageUrl,
                 contentType: ContentType.live,
               ),
             ),
@@ -1327,7 +1682,7 @@ class _FavoriteCard extends StatelessWidget {
 
   Widget _buildPlaceholder(ColorScheme colorScheme) {
     String iconPath;
-    switch (favorite.contentType) {
+    switch (widget.favorite.contentType) {
       case ContentType.movie:
         iconPath = 'assets/icons/film-strip.svg';
         break;

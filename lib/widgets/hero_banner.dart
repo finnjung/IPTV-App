@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -342,40 +343,146 @@ class _QualityChip extends StatelessWidget {
   }
 }
 
-/// Play-Button im Netflix-Stil
-class _PlayButton extends StatelessWidget {
+/// Globaler FocusNode für den HeroBanner Play-Button
+/// Wird von der Navigation verwendet, um den Button direkt zu fokussieren
+class HeroBannerFocus {
+  static FocusNode? playButtonFocusNode;
+
+  static void requestPlayButtonFocus() {
+    if (playButtonFocusNode != null && playButtonFocusNode!.canRequestFocus) {
+      playButtonFocusNode!.requestFocus();
+    }
+  }
+
+  static bool get hasPlayButton => playButtonFocusNode != null && playButtonFocusNode!.canRequestFocus;
+}
+
+/// Play-Button im Netflix-Stil mit TV-Focus-Support
+class _PlayButton extends StatefulWidget {
   final VoidCallback? onPressed;
 
   const _PlayButton({this.onPressed});
 
   @override
+  State<_PlayButton> createState() => _PlayButtonState();
+}
+
+class _PlayButtonState extends State<_PlayButton>
+    with SingleTickerProviderStateMixin {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    // Registriere den FocusNode global für Navigation-Zugriff
+    HeroBannerFocus.playButtonFocusNode = _focusNode;
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    // Entferne globale Referenz
+    if (HeroBannerFocus.playButtonFocusNode == _focusNode) {
+      HeroBannerFocus.playButtonFocusNode = null;
+    }
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      // Smooth scroll zur fokussierten Card
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        widget.onPressed?.call();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.black,
-                size: 28,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Abspielen',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: _isFocused ? Colors.white : Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: _isFocused
+                  ? Border.all(color: Colors.amber, width: 3)
+                  : null,
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.amber.withAlpha(100),
+                        blurRadius: 16,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.play_arrow_rounded,
                   color: Colors.black,
+                  size: 28,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  'Abspielen',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

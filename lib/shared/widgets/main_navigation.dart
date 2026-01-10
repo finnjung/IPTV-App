@@ -10,6 +10,7 @@ import '../../screens/movies_screen.dart';
 import '../../screens/series_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/search_screen.dart';
+import '../../widgets/hero_banner.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -23,6 +24,14 @@ class _MainNavigationState extends State<MainNavigation>
   int _selectedIndex = 0;
   late PageController _pageController;
   late AnimationController _slideLineController;
+
+  // TV Navigation
+  // Navigation order: Start(0) -> Filme(1) -> Serien(2) -> Live(3) -> Search -> Profil(4)
+  final FocusNode _mainFocusNode = FocusNode();
+  int _focusedNavIndex = 0; // 0-3 for main tabs, 4 for profile
+  bool _isSearchFocused = false; // Track if search icon is focused
+  final List<FocusNode> _navFocusNodes = List.generate(5, (_) => FocusNode());
+  final FocusNode _searchFocusNode = FocusNode();
 
   static const List<String> _tabLabels = [
     'Start',
@@ -63,7 +72,119 @@ class _MainNavigationState extends State<MainNavigation>
   void dispose() {
     _pageController.dispose();
     _slideLineController.dispose();
+    _mainFocusNode.dispose();
+    _searchFocusNode.dispose();
+    for (final node in _navFocusNodes) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  // TV/Keyboard Navigation Handler
+  // Navigation order: Start(0) -> Filme(1) -> Serien(2) -> Live(3) -> Search -> Profil(4)
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Prüfe ob der Fokus aktuell in der Navigation ist
+    final isInNav = _navFocusNodes.any((n) => n.hasFocus) ||
+        _searchFocusNode.hasFocus;
+
+    // Horizontale Navigation zwischen Tabs - NUR wenn Fokus in der Nav ist
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      if (!isInNav) return KeyEventResult.ignored; // Event an Content weitergeben
+
+      setState(() {
+        if (_focusedNavIndex == 4 && !_isSearchFocused) {
+          // Von Profil zu Suche
+          _isSearchFocused = true;
+          _searchFocusNode.requestFocus();
+        } else if (_isSearchFocused) {
+          // Von Suche zu Live (Index 3)
+          _isSearchFocused = false;
+          _focusedNavIndex = 3;
+          _navFocusNodes[3].requestFocus();
+        } else if (_focusedNavIndex > 0) {
+          // Zwischen Tabs navigieren
+          _focusedNavIndex--;
+          _navFocusNodes[_focusedNavIndex].requestFocus();
+        }
+      });
+      return KeyEventResult.handled;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (!isInNav) return KeyEventResult.ignored; // Event an Content weitergeben
+
+      setState(() {
+        if (_focusedNavIndex < 3) {
+          // Zwischen Tabs 0-3 navigieren
+          _focusedNavIndex++;
+          _navFocusNodes[_focusedNavIndex].requestFocus();
+        } else if (_focusedNavIndex == 3 && !_isSearchFocused) {
+          // Von Live (Index 3) zu Suche
+          _isSearchFocused = true;
+          _searchFocusNode.requestFocus();
+        } else if (_isSearchFocused) {
+          // Von Suche zu Profil (Index 4)
+          _isSearchFocused = false;
+          _focusedNavIndex = 4;
+          _navFocusNodes[4].requestFocus();
+        }
+      });
+      return KeyEventResult.handled;
+    }
+
+    // Vertikale Navigation: Von Nav zum Screen-Inhalt und zurück
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      if (isInNav) {
+        // Auf dem StartScreen: Zuerst den Play-Button im HeroBanner fokussieren
+        if (_selectedIndex == 0 && HeroBannerFocus.hasPlayButton) {
+          HeroBannerFocus.requestPlayButtonFocus();
+          setState(() {});
+          return KeyEventResult.handled;
+        }
+        // Sonst: Versuche den Fokus nach unten zum Screen-Inhalt zu bewegen
+        final moved = FocusScope.of(context).focusInDirection(TraversalDirection.down);
+        if (moved) {
+          // Fokus hat die Nav verlassen - State aktualisieren
+          setState(() {});
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (!isInNav) {
+        // Wir sind im Screen-Inhalt, versuche zurück zur Navigation
+        final moved = FocusScope.of(context).focusInDirection(TraversalDirection.up);
+        if (moved) {
+          return KeyEventResult.handled;
+        } else {
+          // Fallback: Fokussiere den aktuell ausgewählten Tab
+          final navIndex = _selectedIndex < 4 ? _selectedIndex : 0;
+          _navFocusNodes[navIndex].requestFocus();
+          setState(() {
+            _focusedNavIndex = navIndex;
+            _isSearchFocused = false;
+          });
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    }
+
+    // Tab-Wechsel mit Zahlen 1-5
+    if (event.logicalKey.keyId >= LogicalKeyboardKey.digit1.keyId &&
+        event.logicalKey.keyId <= LogicalKeyboardKey.digit5.keyId) {
+      final index = event.logicalKey.keyId - LogicalKeyboardKey.digit1.keyId;
+      _onItemTapped(index);
+      return KeyEventResult.handled;
+    }
+
+    // Suche mit S-Taste
+    if (event.logicalKey == LogicalKeyboardKey.keyS) {
+      _openSearch();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
   }
 
   bool _isDesktopPlatform() {
@@ -239,33 +360,59 @@ class _MainNavigationState extends State<MainNavigation>
               Row(
                 children: List.generate(4, (index) {
                   final isSelected = _selectedIndex == index;
+                  final isFocused = _navFocusNodes[index].hasFocus;
                   return Padding(
                     padding: const EdgeInsets.only(left: 24),
-                    child: GestureDetector(
-                      onTap: () => _onItemTapped(index),
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.white.withAlpha(20)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _tabLabels[index],
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.white.withAlpha(200),
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                            shadows: [
-                              Shadow(
-                                blurRadius: 8,
-                                color: Colors.black.withAlpha(120),
-                              ),
-                            ],
+                    child: Focus(
+                      focusNode: _navFocusNodes[index],
+                      onFocusChange: (hasFocus) {
+                        // Immer setState aufrufen um visuellen Fokus-Zustand zu aktualisieren
+                        setState(() {
+                          if (hasFocus) {
+                            _focusedNavIndex = index;
+                          }
+                        });
+                      },
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent &&
+                            (event.logicalKey == LogicalKeyboardKey.select ||
+                             event.logicalKey == LogicalKeyboardKey.enter ||
+                             event.logicalKey == LogicalKeyboardKey.space)) {
+                          _onItemTapped(index);
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: GestureDetector(
+                        onTap: () => _onItemTapped(index),
+                        behavior: HitTestBehavior.opaque,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected || isFocused
+                                ? Colors.white.withAlpha(isFocused ? 40 : 20)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isFocused
+                                ? Border.all(color: Colors.white, width: 2)
+                                : null,
+                          ),
+                          child: Text(
+                            _tabLabels[index],
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: isSelected || isFocused
+                                  ? Colors.white
+                                  : Colors.white.withAlpha(200),
+                              fontWeight: isSelected || isFocused ? FontWeight.w600 : FontWeight.w500,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 8,
+                                  color: Colors.black.withAlpha(120),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -277,57 +424,111 @@ class _MainNavigationState extends State<MainNavigation>
               const SizedBox(width: 20),
 
               // Such-Icon
-              GestureDetector(
-                onTap: _openSearch,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withAlpha(30),
-                      width: 1,
-                    ),
-                  ),
-                  child: SvgPicture.asset(
-                    'assets/icons/magnifying-glass.svg',
-                    width: 20,
-                    height: 20,
-                    colorFilter: const ColorFilter.mode(
-                      Colors.white,
-                      BlendMode.srcIn,
-                    ),
-                  ),
+              Focus(
+                focusNode: _searchFocusNode,
+                onFocusChange: (hasFocus) {
+                  // Immer setState aufrufen um visuellen Fokus-Zustand zu aktualisieren
+                  setState(() {
+                    if (hasFocus) {
+                      _isSearchFocused = true;
+                    }
+                  });
+                },
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.select ||
+                       event.logicalKey == LogicalKeyboardKey.enter ||
+                       event.logicalKey == LogicalKeyboardKey.space)) {
+                    _openSearch();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final isFocused = _searchFocusNode.hasFocus;
+                    return GestureDetector(
+                      onTap: _openSearch,
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(isFocused ? 40 : 15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isFocused ? Colors.white : Colors.white.withAlpha(30),
+                            width: isFocused ? 2 : 1,
+                          ),
+                        ),
+                        child: SvgPicture.asset(
+                          'assets/icons/magnifying-glass.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: const ColorFilter.mode(
+                            Colors.white,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 10),
 
               // Profil Icon
-              GestureDetector(
-                onTap: () => _onItemTapped(4),
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: _selectedIndex == 4
-                        ? Colors.white.withAlpha(30)
-                        : Colors.white.withAlpha(15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: Colors.white.withAlpha(30),
-                      width: 1,
-                    ),
-                  ),
-                  child: SvgPicture.asset(
-                    'assets/icons/user.svg',
-                    width: 20,
-                    height: 20,
-                    colorFilter: const ColorFilter.mode(
-                      Colors.white,
-                      BlendMode.srcIn,
-                    ),
-                  ),
+              Focus(
+                focusNode: _navFocusNodes[4],
+                onFocusChange: (hasFocus) {
+                  // Immer setState aufrufen um visuellen Fokus-Zustand zu aktualisieren
+                  setState(() {
+                    if (hasFocus) {
+                      _focusedNavIndex = 4;
+                    }
+                  });
+                },
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      (event.logicalKey == LogicalKeyboardKey.select ||
+                       event.logicalKey == LogicalKeyboardKey.enter ||
+                       event.logicalKey == LogicalKeyboardKey.space)) {
+                    _onItemTapped(4);
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final isFocused = _navFocusNodes[4].hasFocus;
+                    return GestureDetector(
+                      onTap: () => _onItemTapped(4),
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _selectedIndex == 4 || isFocused
+                              ? Colors.white.withAlpha(isFocused ? 40 : 30)
+                              : Colors.white.withAlpha(15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isFocused ? Colors.white : Colors.white.withAlpha(30),
+                            width: isFocused ? 2 : 1,
+                          ),
+                        ),
+                        child: SvgPicture.asset(
+                          'assets/icons/user.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: const ColorFilter.mode(
+                            Colors.white,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -400,36 +601,72 @@ class _MainNavigationState extends State<MainNavigation>
                 children: List.generate(_tabLabels.length, (index) {
                   final isSelected = _selectedIndex == index;
                   return Expanded(
-                    child: GestureDetector(
-                      onTap: () => _onItemTapped(index),
-                      behavior: HitTestBehavior.opaque,
-                      child: SizedBox(
-                        height: 70,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildTabIcon(index, isSelected),
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              height: isSelected ? 18 : 0,
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 200),
-                                opacity: isSelected ? 1.0 : 0.0,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    _tabLabels[index],
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 10,
-                                      color: colorScheme.onSurface,
-                                      fontWeight: FontWeight.w600,
+                    child: Focus(
+                      focusNode: _navFocusNodes[index],
+                      onFocusChange: (hasFocus) {
+                        // Immer setState aufrufen um visuellen Fokus-Zustand zu aktualisieren
+                        setState(() {
+                          if (hasFocus) {
+                            _focusedNavIndex = index;
+                          }
+                        });
+                      },
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent &&
+                            (event.logicalKey == LogicalKeyboardKey.select ||
+                             event.logicalKey == LogicalKeyboardKey.enter ||
+                             event.logicalKey == LogicalKeyboardKey.space)) {
+                          _onItemTapped(index);
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: Builder(
+                        builder: (context) {
+                          final isFocused = _navFocusNodes[index].hasFocus;
+                          return GestureDetector(
+                            onTap: () => _onItemTapped(index),
+                            behavior: HitTestBehavior.opaque,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              height: 70,
+                              decoration: BoxDecoration(
+                                color: isFocused
+                                    ? colorScheme.primary.withAlpha(30)
+                                    : Colors.transparent,
+                                border: isFocused
+                                    ? Border.all(color: colorScheme.primary, width: 2)
+                                    : null,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildTabIcon(index, isSelected || isFocused),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    height: isSelected ? 18 : 0,
+                                    child: AnimatedOpacity(
+                                      duration: const Duration(milliseconds: 200),
+                                      opacity: isSelected ? 1.0 : 0.0,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          _tabLabels[index],
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            color: colorScheme.onSurface,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   );
@@ -445,23 +682,27 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   Widget build(BuildContext context) {
     final isDesktop = _useDesktopLayout(context);
-    return Scaffold(
-      extendBody: false,
-      extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
-          // Content (PageView)
-          PageView(
-            controller: _pageController,
-            onPageChanged: _onPageChanged,
-            physics: isDesktop ? const NeverScrollableScrollPhysics() : null,
-            children: _screens,
-          ),
-          // Desktop Navigation Overlay (über dem Content)
-          if (isDesktop) _buildDesktopNavOverlay(),
-        ],
+    return Focus(
+      focusNode: _mainFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        extendBody: false,
+        extendBodyBehindAppBar: true,
+        body: Stack(
+          children: [
+            // Content (PageView)
+            PageView(
+              controller: _pageController,
+              onPageChanged: _onPageChanged,
+              physics: isDesktop ? const NeverScrollableScrollPhysics() : null,
+              children: _screens,
+            ),
+            // Desktop Navigation Overlay (über dem Content)
+            if (isDesktop) _buildDesktopNavOverlay(),
+          ],
+        ),
+        bottomNavigationBar: isDesktop ? null : _buildMobileBottomNavigation(),
       ),
-      bottomNavigationBar: isDesktop ? null : _buildMobileBottomNavigation(),
     );
   }
 }

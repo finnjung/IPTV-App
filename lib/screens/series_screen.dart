@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -95,10 +96,11 @@ class _SeriesScreenState extends State<SeriesScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 200,
+                        height: 220, // Extra Platz für Fokus-Scale-Effekt
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          clipBehavior: Clip.none,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                           itemCount: category.items.length,
                           itemBuilder: (context, index) {
                             final series = category.items[index];
@@ -261,162 +263,250 @@ class _SeriesScreenState extends State<SeriesScreen> {
   }
 }
 
-class _SeriesCard extends StatelessWidget {
+class _SeriesCard extends StatefulWidget {
   final XTremeCodeSeriesItem series;
   final VoidCallback onTap;
+  final bool autofocus;
 
   const _SeriesCard({
     required this.series,
     required this.onTap,
+    this.autofocus = false,
   });
+
+  @override
+  State<_SeriesCard> createState() => _SeriesCardState();
+}
+
+class _SeriesCardState extends State<_SeriesCard>
+    with SingleTickerProviderStateMixin {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      // Smooth scroll zur fokussierten Card
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        widget.onTap();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-    final metadata = ContentParser.parse(series.name ?? '');
-    final favoriteId = 'series_${series.seriesId}';
+    final metadata = ContentParser.parse(widget.series.name ?? '');
+    final favoriteId = 'series_${widget.series.seriesId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 130,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: Stack(
-            children: [
-              // Full-size image
-              Positioned.fill(
-                child: Container(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  child: series.cover != null
-                      ? CachedNetworkImage(
-                          imageUrl: series.cover!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                        )
-                      : _buildPlaceholder(colorScheme),
-                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 130,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
               ),
-              // Gradient overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withAlpha(100),
-                        Colors.black.withAlpha(200),
-                        Colors.black.withAlpha(230),
-                      ],
-                      stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(40),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                children: [
+                  // Full-size image
+                  Positioned.fill(
+                    child: Container(
+                      color: colorScheme.onSurface.withAlpha(10),
+                      child: widget.series.cover != null
+                          ? CachedNetworkImage(
+                              imageUrl: widget.series.cover!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                            )
+                          : _buildPlaceholder(colorScheme),
                     ),
                   ),
-                ),
-              ),
-              // Favorite button (top right)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: GestureDetector(
-                  onTap: () {
-                    final favorite = Favorite.fromSeries(
-                      seriesId: series.seriesId ?? 0,
-                      title: series.name ?? '',
-                      imageUrl: series.cover,
-                    );
-                    xtreamService.toggleFavorite(favorite);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: SvgPicture.asset(
-                      isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
-                      width: 14,
-                      height: 14,
-                      colorFilter: const ColorFilter.mode(
-                        Colors.white,
-                        BlendMode.srcIn,
+                  // Gradient overlay
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withAlpha(100),
+                            Colors.black.withAlpha(200),
+                            Colors.black.withAlpha(230),
+                          ],
+                          stops: const [0.0, 0.45, 0.65, 0.85, 1.0],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              // Tags (top left) - Quality + Language
-              if (metadata.quality != null || metadata.language != null)
-                Positioned(
-                  top: 6,
-                  left: 6,
-                  right: 40, // Platz für Favoriten-Button
-                  child: Row(
-                    children: [
-                      if (metadata.quality != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                  // Favorite button (top right)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: GestureDetector(
+                      onTap: () {
+                        final favorite = Favorite.fromSeries(
+                          seriesId: widget.series.seriesId ?? 0,
+                          title: widget.series.name ?? '',
+                          imageUrl: widget.series.cover,
+                        );
+                        xtreamService.toggleFavorite(favorite);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: SvgPicture.asset(
+                          isFavorite ? 'assets/icons/heart-fill.svg' : 'assets/icons/heart.svg',
+                          width: 14,
+                          height: 14,
+                          colorFilter: const ColorFilter.mode(
+                            Colors.white,
+                            BlendMode.srcIn,
                           ),
                         ),
-                      if (metadata.quality != null && metadata.language != null)
-                        const SizedBox(width: 4),
-                      if (metadata.language != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.language!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  // Tags (top left) - Quality + Language
+                  if (metadata.quality != null || metadata.language != null)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      right: 40,
+                      child: Row(
+                        children: [
+                          if (metadata.quality != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.quality!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                          if (metadata.quality != null && metadata.language != null)
+                            const SizedBox(width: 4),
+                          if (metadata.language != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.language!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  // Title at bottom
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: Text(
+                      metadata.cleanName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              // Title at bottom
-              Positioned(
-                left: 8,
-                right: 8,
-                bottom: 8,
-                child: Text(
-                  metadata.cleanName,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

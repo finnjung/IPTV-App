@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/content_parser.dart';
 
-class ContentCard extends StatelessWidget {
+class ContentCard extends StatefulWidget {
   final String title;
   final String? subtitle;
   final String? imageUrl;
@@ -14,6 +15,8 @@ class ContentCard extends StatelessWidget {
   final bool isLive;
   final bool isCompact;
   final double? progress;
+  final bool autofocus;
+  final FocusNode? focusNode;
 
   const ContentCard({
     super.key,
@@ -25,7 +28,77 @@ class ContentCard extends StatelessWidget {
     this.isLive = false,
     this.isCompact = false,
     this.progress,
+    this.autofocus = false,
+    this.focusNode,
   });
+
+  @override
+  State<ContentCard> createState() => _ContentCardState();
+}
+
+class _ContentCardState extends State<ContentCard>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    if (widget.focusNode == null) {
+      _focusNode.dispose();
+    }
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() {
+      _isFocused = hasFocus;
+    });
+    if (hasFocus) {
+      _scaleController.forward();
+      // Smooth scroll zur fokussierten Card
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap?.call();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,258 +106,277 @@ class ContentCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Parse metadata from title
-    final metadata = ContentParser.parse(title);
+    final metadata = ContentParser.parse(widget.title);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? colorScheme.surface : colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
-            width: 1,
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(isDark ? 30 : 15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              color: isDark ? colorScheme.surface : colorScheme.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _isFocused
+                    ? Colors.white
+                    : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _isFocused
+                      ? Colors.white.withAlpha(50)
+                      : Colors.black.withAlpha(isDark ? 30 : 15),
+                  blurRadius: _isFocused ? 16 : 12,
+                  spreadRadius: _isFocused ? 2 : 0,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Stack(
-            children: [
-              // Background Image or Gradient
-              if (imageUrl != null)
-                Positioned.fill(
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Shimmer.fromColors(
-                      baseColor: colorScheme.surface,
-                      highlightColor: colorScheme.surface.withAlpha(150),
-                      child: Container(color: colorScheme.surface),
-                    ),
-                    errorWidget: (context, url, error) =>
-                        _buildPlaceholder(context),
-                  ),
-                )
-              else
-                Positioned.fill(child: _buildPlaceholder(context)),
-
-              // Gradient Overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withAlpha(isCompact ? 150 : 180),
-                      ],
-                      stops: const [0.4, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Content
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      metadata.cleanName,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: isCompact ? 12 : 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: isCompact ? 1 : 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (subtitle != null && !isCompact) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white.withAlpha(180),
-                          fontSize: 12,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                children: [
+                  // Background Image or Gradient
+                  if (widget.imageUrl != null)
+                    Positioned.fill(
+                      child: CachedNetworkImage(
+                        imageUrl: widget.imageUrl!,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Shimmer.fromColors(
+                          baseColor: colorScheme.surface,
+                          highlightColor: colorScheme.surface.withAlpha(150),
+                          child: Container(color: colorScheme.surface),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        errorWidget: (context, url, error) =>
+                            _buildPlaceholder(context),
                       ),
-                    ],
-                  ],
-                ),
-              ),
+                    )
+                  else
+                    Positioned.fill(child: _buildPlaceholder(context)),
 
-              // Progress Bar
-              if (progress != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    height: 3,
-                    color: Colors.white.withAlpha(50),
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: progress!.clamp(0.0, 1.0),
+                  // Gradient Overlay
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withAlpha(widget.isCompact ? 150 : 180),
+                          ],
+                          stops: const [0.4, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Content
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          metadata.cleanName,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: widget.isCompact ? 12 : 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: widget.isCompact ? 1 : 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (widget.subtitle != null && !widget.isCompact) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.subtitle!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white.withAlpha(180),
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // Progress Bar
+                  if (widget.progress != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
                       child: Container(
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary,
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(14),
+                        height: 3,
+                        color: Colors.white.withAlpha(50),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: widget.progress!.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(14),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
 
-              // Badges (Quality + 3D + Year + Language)
-              if ((metadata.quality != null || metadata.is3D || metadata.year != null || metadata.language != null) && !isLive)
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  right: 8,
-                  child: Row(
-                    children: [
-                      if (metadata.quality != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                  // Badges (Quality + 3D + Year + Language)
+                  if ((metadata.quality != null || metadata.is3D || metadata.year != null || metadata.language != null) && !widget.isLive)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      right: 8,
+                      child: Row(
+                        children: [
+                          if (metadata.quality != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.quality!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      if (metadata.is3D) ...[
-                        if (metadata.quality != null) const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '3D',
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                          if (metadata.is3D) ...[
+                            if (metadata.quality != null) const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.deepPurple,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '3D',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
-                      // Jahr Badge (rechts)
-                      if (metadata.year != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.year.toString(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                          ],
+                          const Spacer(),
+                          // Jahr Badge (rechts)
+                          if (metadata.year != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.year.toString(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      // Sprache Badge (rechts neben Jahr)
-                      if (metadata.language != null) ...[
-                        if (metadata.year != null) const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withAlpha(180),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.language!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                          // Sprache Badge (rechts neben Jahr)
+                          if (metadata.language != null) ...[
+                            if (metadata.year != null) const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(180),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.language!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                          ],
+                        ],
+                      ),
+                    ),
 
-              // Live Badge - sanfte Animation + Qualitäts/Länder-Badge für Live-TV
-              if (isLive)
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  right: 8,
-                  child: Row(
-                    children: [
-                      // Länder-Badge links (DE, UK, US, etc.)
-                      if (metadata.country != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.country!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                  // Live Badge - sanfte Animation + Qualitäts/Länder-Badge für Live-TV
+                  if (widget.isLive)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      right: 8,
+                      child: Row(
+                        children: [
+                          // Länder-Badge links (DE, UK, US, etc.)
+                          if (metadata.country != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.country!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      // Qualitäts-Badge (4K, HD, etc.)
-                      if (metadata.quality != null) ...[
-                        if (metadata.country != null) const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            metadata.quality!,
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                          // Qualitäts-Badge (4K, HD, etc.)
+                          if (metadata.quality != null) ...[
+                            if (metadata.country != null) const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                metadata.quality!,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
-                      // LIVE Badge rechts
-                      _LiveBadge(),
-                    ],
-                  ),
-                ),
-            ],
+                          ],
+                          const Spacer(),
+                          // LIVE Badge rechts
+                          _LiveBadge(),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -306,11 +398,11 @@ class ContentCard extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: icon != null
+        child: widget.icon != null
             ? SvgPicture.asset(
-                icon!,
-                width: isCompact ? 28 : 40,
-                height: isCompact ? 28 : 40,
+                widget.icon!,
+                width: widget.isCompact ? 28 : 40,
+                height: widget.isCompact ? 28 : 40,
                 colorFilter: ColorFilter.mode(
                   colorScheme.onSurface.withAlpha(75),
                   BlendMode.srcIn,
@@ -318,7 +410,7 @@ class ContentCard extends StatelessWidget {
               )
             : Icon(
                 Icons.image_outlined,
-                size: isCompact ? 28 : 40,
+                size: widget.isCompact ? 28 : 40,
                 color: colorScheme.onSurface.withAlpha(75),
               ),
       ),
