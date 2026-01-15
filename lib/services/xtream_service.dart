@@ -545,6 +545,29 @@ class XtreamService extends ChangeNotifier {
     notifyListeners();
 
     _startScreenContent = await _cacheService.loadStartScreenContent();
+
+    // Spotlight täglich neu aus gecachten Daten berechnen (ohne API-Call)
+    if (_startScreenContent != null) {
+      final newSpotlight = _selectDailySpotlight(
+        _startScreenContent!.curatedMovies,
+        _startScreenContent!.curatedSeries,
+        [], // allMovies nicht nötig für Spotlight aus curated content
+        [], // allSeries nicht nötig für Spotlight aus curated content
+      );
+      _startScreenContent = StartScreenContent(
+        popularMovies: _startScreenContent!.popularMovies,
+        popularSeries: _startScreenContent!.popularSeries,
+        spotlight: newSpotlight,
+        curatedMovies: _startScreenContent!.curatedMovies,
+        curatedSeries: _startScreenContent!.curatedSeries,
+        curatedKids: _startScreenContent!.curatedKids,
+        thrillerSeries: _startScreenContent!.thrillerSeries,
+        actionMovies: _startScreenContent!.actionMovies,
+        allMovies: _startScreenContent!.allMovies,
+        allSeries: _startScreenContent!.allSeries,
+        sectionOrder: _startScreenContent!.sectionOrder,
+      );
+    }
     debugPrint('Cache: StartScreen loaded - ${_startScreenContent?.curatedMovies.length ?? 0} curated movies');
 
     _preloadStatus = 'Lade Filme...';
@@ -977,10 +1000,6 @@ class XtreamService extends ChangeNotifier {
   Future<StartScreenContent> loadStartScreenContent({bool forceRefresh = false}) async {
     // Return cached content if available (from preload)
     if (_startScreenContent != null && !forceRefresh) {
-      // Falls aus Cache geladen und allMovies/allSeries leer sind, lade sie nach
-      if (_startScreenContent!.allMovies.isEmpty || _startScreenContent!.allSeries.isEmpty) {
-        await _fillStartScreenAllContent();
-      }
       return _startScreenContent!;
     }
 
@@ -990,9 +1009,6 @@ class XtreamService extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 100));
       }
       if (_startScreenContent != null) {
-        if (_startScreenContent!.allMovies.isEmpty || _startScreenContent!.allSeries.isEmpty) {
-          await _fillStartScreenAllContent();
-        }
         return _startScreenContent!;
       }
     }
@@ -1005,7 +1021,7 @@ class XtreamService extends ChangeNotifier {
       return _startScreenContent ?? StartScreenContent.empty();
     }
 
-    // Fallback: Load manually if preload didn't happen
+    // Fallback: Load manually if preload didn't happen (only on first connect)
     _isLoadingStartScreen = true;
     notifyListeners();
 
@@ -1013,22 +1029,6 @@ class XtreamService extends ChangeNotifier {
       final allMovies = await getMovies();
       final allSeries = await getSeries();
       _startScreenContent = await _buildStartScreenContentInternal(allMovies, allSeries);
-      // Fülle auch allMovies/allSeries
-      final sortedMovies = await compute(_sortAlphabetically, allMovies);
-      final sortedSeries = await compute(_sortSeriesAlphabetically, allSeries);
-      _startScreenContent = StartScreenContent(
-        popularMovies: _startScreenContent!.popularMovies,
-        popularSeries: _startScreenContent!.popularSeries,
-        spotlight: _startScreenContent!.spotlight,
-        curatedMovies: _startScreenContent!.curatedMovies,
-        curatedSeries: _startScreenContent!.curatedSeries,
-        curatedKids: _startScreenContent!.curatedKids,
-        thrillerSeries: _startScreenContent!.thrillerSeries,
-        actionMovies: _startScreenContent!.actionMovies,
-        allMovies: sortedMovies,
-        allSeries: sortedSeries,
-        sectionOrder: _startScreenContent!.sectionOrder,
-      );
       debugPrint('Start screen content loaded manually');
     } catch (e) {
       debugPrint('Error loading start screen content: $e');
@@ -1041,27 +1041,8 @@ class XtreamService extends ChangeNotifier {
     return _startScreenContent!;
   }
 
-  /// Füllt allMovies/allSeries nach, wenn aus Cache geladen
-  Future<void> _fillStartScreenAllContent() async {
-    if (_startScreenContent == null) return;
-    final allMovies = await getMovies();
-    final allSeries = await getSeries();
-    final sortedMovies = await compute(_sortAlphabetically, allMovies);
-    final sortedSeries = await compute(_sortSeriesAlphabetically, allSeries);
-    _startScreenContent = StartScreenContent(
-      popularMovies: _startScreenContent!.popularMovies,
-      popularSeries: _startScreenContent!.popularSeries,
-      spotlight: _startScreenContent!.spotlight,
-      curatedMovies: _startScreenContent!.curatedMovies,
-      curatedSeries: _startScreenContent!.curatedSeries,
-      curatedKids: _startScreenContent!.curatedKids,
-      thrillerSeries: _startScreenContent!.thrillerSeries,
-      actionMovies: _startScreenContent!.actionMovies,
-      allMovies: sortedMovies,
-      allSeries: sortedSeries,
-      sectionOrder: _startScreenContent!.sectionOrder,
-    );
-  }
+  // _fillStartScreenAllContent entfernt - nicht mehr benötigt da "Alle Filme/Serien"
+  // Sektionen nicht mehr auf dem Start-Screen sind (verfügbar auf Filme/Serien Tabs)
 
   /// Lädt alle Filme für "Alle Inhalte" Ansicht (on-demand, nicht gecacht)
   Future<List<XTremeCodeVodItem>> loadAllMoviesSorted() async {
@@ -1204,11 +1185,9 @@ class XtreamService extends ChangeNotifier {
       StartScreenSection.actionMovies,
     ];
 
-    // Feste Sections am Ende
-    final endSections = [
-      StartScreenSection.allMovies,
-      StartScreenSection.allSeries,
-    ];
+    // "Alle Filme/Serien" nicht auf Start-Screen - diese sind auf den Filme/Serien Tabs verfügbar
+    // Das vermeidet langsame API-Calls beim Laden des Start-Screens
+    final endSections = <StartScreenSection>[];
 
     // Seed basierend auf Tag (konsistent pro Tag)
     final now = DateTime.now();
@@ -1232,10 +1211,6 @@ class XtreamService extends ChangeNotifier {
   Future<MoviesScreenContent> loadMoviesScreenContent({bool forceRefresh = false}) async {
     // Return cached content if available (from preload)
     if (_moviesScreenContent != null && !forceRefresh) {
-      // Falls aus Cache geladen und allMoviesSorted leer ist, lade sie nach
-      if (_moviesScreenContent!.allMoviesSorted.isEmpty) {
-        await _fillMoviesAllSorted();
-      }
       return _moviesScreenContent!;
     }
 
@@ -1245,9 +1220,6 @@ class XtreamService extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 100));
       }
       if (_moviesScreenContent != null) {
-        if (_moviesScreenContent!.allMoviesSorted.isEmpty) {
-          await _fillMoviesAllSorted();
-        }
         return _moviesScreenContent!;
       }
     }
@@ -1298,10 +1270,6 @@ class XtreamService extends ChangeNotifier {
   Future<SeriesScreenContent> loadSeriesScreenContent({bool forceRefresh = false}) async {
     // Return cached content if available (from preload)
     if (_seriesScreenContent != null && !forceRefresh) {
-      // Falls aus Cache geladen und allSeriesSorted leer ist, lade sie nach
-      if (_seriesScreenContent!.allSeriesSorted.isEmpty) {
-        await _fillSeriesAllSorted();
-      }
       return _seriesScreenContent!;
     }
 
@@ -1311,9 +1279,6 @@ class XtreamService extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 100));
       }
       if (_seriesScreenContent != null) {
-        if (_seriesScreenContent!.allSeriesSorted.isEmpty) {
-          await _fillSeriesAllSorted();
-        }
         return _seriesScreenContent!;
       }
     }

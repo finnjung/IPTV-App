@@ -381,6 +381,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 500),
       builder: (context) => Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.7,
@@ -494,6 +495,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 500),
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: colorScheme.surface,
@@ -611,6 +613,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  bool _isRefreshing = false;
+
+  Future<void> _refreshAllContent() async {
+    if (_isRefreshing) return;
+
+    setState(() => _isRefreshing = true);
+
+    try {
+      await context.read<XtreamService>().refreshAllContent();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Inhalte wurden aktualisiert',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Fehler beim Aktualisieren: $e',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
+  }
+
   Widget _buildAppSection(ColorScheme colorScheme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -627,6 +670,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
+        // Inhalte neu laden
+        _FocusableProfileItem(
+          onTap: _isRefreshing ? null : _refreshAllContent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: _isRefreshing
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.onSurface.withAlpha(180),
+                            ),
+                          )
+                        : SvgPicture.asset(
+                            'assets/icons/arrows-clockwise.svg',
+                            width: 20,
+                            height: 20,
+                            colorFilter: ColorFilter.mode(
+                              colorScheme.onSurface.withAlpha(180),
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Inhalte neu laden',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isRefreshing
+                              ? 'Wird aktualisiert...'
+                              : 'Filme, Serien & Live TV aktualisieren',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!_isRefreshing)
+                    SvgPicture.asset(
+                      'assets/icons/caret-right.svg',
+                      width: 18,
+                      height: 18,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(100),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         // Erscheinungsbild
         _FocusableProfileItem(
           onTap: () {},
@@ -791,6 +917,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Datenschutz
         _FocusableProfileItem(
           onTap: () => _navigateToLegalPage(LegalPageType.privacy),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
           child: Container(
             decoration: BoxDecoration(
               color: colorScheme.surface,
@@ -861,6 +988,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Impressum
         _FocusableProfileItem(
           onTap: () => _navigateToLegalPage(LegalPageType.impressum),
+          borderRadius: BorderRadius.zero,
           child: Container(
             decoration: BoxDecoration(
               color: colorScheme.surface,
@@ -939,6 +1067,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Nutzungsbedingungen
         _FocusableProfileItem(
           onTap: () => _navigateToLegalPage(LegalPageType.terms),
+          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
           child: Container(
             decoration: BoxDecoration(
               color: colorScheme.surface,
@@ -1044,6 +1173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
+    final screenWidth = MediaQuery.of(context).size.width;
 
     // Show login screen if not connected
     if (!xtreamService.isConnected) {
@@ -1057,231 +1187,341 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Extra Padding für macOS wegen Traffic Lights
     final extraTopPadding = !kIsWeb && Platform.isMacOS ? 28.0 : 0.0;
 
+    // Responsive Breakpoints
+    final bool isDesktop = screenWidth > 900;
+    final double horizontalPadding = isDesktop ? 40.0 : 20.0;
+    const double maxContentWidth = 1200.0;
+    const double columnSpacing = 24.0;
+
+    // Connection Status Card Widget (wiederverwendbar)
+    Widget connectionStatusCard = Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colorScheme.onSurface.withAlpha(40),
+            colorScheme.onSurface.withAlpha(25),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(50),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: SvgPicture.asset(
+              'assets/icons/plug.svg',
+              width: 24,
+              height: 24,
+              colorFilter: const ColorFilter.mode(
+                Colors.white,
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Verbunden',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                if (xtreamService.credentials != null)
+                  Text(
+                    xtreamService.credentials!.serverUrl,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.white.withAlpha(200),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.green.withAlpha(50),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check,
+              color: Colors.greenAccent,
+              size: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Disconnect Button Widget
+    Widget disconnectButton = _FocusableProfileItem(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _confirmDisconnect(context),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.error.withAlpha(100)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SvgPicture.asset(
+              'assets/icons/sign-out.svg',
+              width: 20,
+              height: 20,
+              colorFilter: ColorFilter.mode(
+                colorScheme.error,
+                BlendMode.srcIn,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Verbindung trennen',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w500,
+                color: colorScheme.error,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Linke Spalte: Account & Server Info
+    Widget leftColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Connection Status
+        connectionStatusCard,
+
+        // Server Info
+        if (xtreamService.serverInfo != null) ...[
+          const SizedBox(height: 24),
+          _buildSection(
+            context,
+            'Server Info',
+            [
+              _SettingsItem(
+                icon: 'assets/icons/user.svg',
+                title: 'Benutzername',
+                subtitle: xtreamService.serverInfo!.userInfo.username ?? '-',
+              ),
+              _SettingsItem(
+                icon: 'assets/icons/clock.svg',
+                title: 'Account gültig bis',
+                subtitle: _formatExpDate(xtreamService.serverInfo!.userInfo.expDate),
+              ),
+              _SettingsItem(
+                icon: 'assets/icons/link.svg',
+                title: 'Aktive Verbindungen',
+                subtitle:
+                    '${xtreamService.serverInfo!.userInfo.activeCons ?? 0} / ${xtreamService.serverInfo!.userInfo.maxConnections ?? 1}',
+              ),
+            ],
+          ),
+        ],
+
+        const SizedBox(height: 24),
+
+        // Content Stats
+        _buildSection(
+          context,
+          'Verfügbare Inhalte',
+          [
+            _SettingsItem(
+              icon: 'assets/icons/broadcast.svg',
+              title: 'Live TV Kategorien',
+              subtitle: '${xtreamService.liveCategories?.length ?? 0} Kategorien',
+            ),
+            _SettingsItem(
+              icon: 'assets/icons/film-strip.svg',
+              title: 'Film Kategorien',
+              subtitle: '${xtreamService.vodCategories?.length ?? 0} Kategorien',
+            ),
+            _SettingsItem(
+              icon: 'assets/icons/monitor-play.svg',
+              title: 'Serien Kategorien',
+              subtitle: '${xtreamService.seriesCategories?.length ?? 0} Kategorien',
+            ),
+          ],
+        ),
+
+      ],
+    );
+
+    // Rechte Spalte: Einstellungen
+    Widget rightColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Leere Serien
+        _buildEmptySeriesSection(colorScheme, xtreamService),
+
+        const SizedBox(height: 24),
+
+        // Spracheinstellungen
+        _buildLanguageSection(colorScheme, xtreamService),
+
+        const SizedBox(height: 24),
+
+        // App Settings
+        _buildAppSection(colorScheme),
+
+        const SizedBox(height: 24),
+
+        // Rechtliches
+        _buildLegalSection(colorScheme),
+
+        // Disconnect Button in rechter Spalte auf Desktop
+        if (isDesktop) ...[
+          const SizedBox(height: 24),
+          disconnectButton,
+        ],
+      ],
+    );
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           controller: _scrollController,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 20 + extraTopPadding, 20, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    SvgPicture.asset(
-                      'assets/icons/user.svg',
-                      width: 28,
-                      height: 28,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface,
-                        BlendMode.srcIn,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Profil',
-                      style: GoogleFonts.poppins(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Connection Status Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        colorScheme.onSurface.withAlpha(40),
-                        colorScheme.onSurface.withAlpha(25),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
+          child: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: maxContentWidth),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                20 + extraTopPadding,
+                horizontalPadding,
+                20,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(50),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: SvgPicture.asset(
-                          'assets/icons/plug.svg',
-                          width: 24,
-                          height: 24,
-                          colorFilter: const ColorFilter.mode(
-                            Colors.white,
-                            BlendMode.srcIn,
-                          ),
+                      SvgPicture.asset(
+                        'assets/icons/user.svg',
+                        width: 28,
+                        height: 28,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.onSurface,
+                          BlendMode.srcIn,
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Verbunden',
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                            if (xtreamService.credentials != null)
-                              Text(
-                                xtreamService.credentials!.serverUrl,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 12,
-                                  color: Colors.white.withAlpha(200),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withAlpha(50),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check,
-                          color: Colors.greenAccent,
-                          size: 16,
+                      const SizedBox(width: 12),
+                      Text(
+                        'Profil',
+                        style: GoogleFonts.poppins(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                     ],
                   ),
-                ),
-
-                // Server Info
-                if (xtreamService.serverInfo != null) ...[
                   const SizedBox(height: 24),
-                  _buildSection(
-                    context,
-                    'Server Info',
-                    [
-                      _SettingsItem(
-                        icon: 'assets/icons/user.svg',
-                        title: 'Benutzername',
-                        subtitle:
-                            xtreamService.serverInfo!.userInfo.username ?? '-',
+
+                  // Desktop: Zweispalten-Layout
+                  if (isDesktop)
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Linke Spalte
+                          Expanded(child: leftColumn),
+                          const SizedBox(width: columnSpacing),
+                          // Rechte Spalte
+                          Expanded(child: rightColumn),
+                        ],
                       ),
-                      _SettingsItem(
-                        icon: 'assets/icons/clock.svg',
-                        title: 'Account gültig bis',
-                        subtitle: _formatExpDate(
-                            xtreamService.serverInfo!.userInfo.expDate),
-                      ),
-                      _SettingsItem(
-                        icon: 'assets/icons/link.svg',
-                        title: 'Aktive Verbindungen',
-                        subtitle:
-                            '${xtreamService.serverInfo!.userInfo.activeCons ?? 0} / ${xtreamService.serverInfo!.userInfo.maxConnections ?? 1}',
+                    )
+                  // Mobile: Einspalten-Layout
+                  else ...[
+                    connectionStatusCard,
+
+                    if (xtreamService.serverInfo != null) ...[
+                      const SizedBox(height: 24),
+                      _buildSection(
+                        context,
+                        'Server Info',
+                        [
+                          _SettingsItem(
+                            icon: 'assets/icons/user.svg',
+                            title: 'Benutzername',
+                            subtitle: xtreamService.serverInfo!.userInfo.username ?? '-',
+                          ),
+                          _SettingsItem(
+                            icon: 'assets/icons/clock.svg',
+                            title: 'Account gültig bis',
+                            subtitle: _formatExpDate(xtreamService.serverInfo!.userInfo.expDate),
+                          ),
+                          _SettingsItem(
+                            icon: 'assets/icons/link.svg',
+                            title: 'Aktive Verbindungen',
+                            subtitle:
+                                '${xtreamService.serverInfo!.userInfo.activeCons ?? 0} / ${xtreamService.serverInfo!.userInfo.maxConnections ?? 1}',
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                ],
 
-                const SizedBox(height: 24),
-
-                // Content Stats
-                _buildSection(
-                  context,
-                  'Verfügbare Inhalte',
-                  [
-                    _SettingsItem(
-                      icon: 'assets/icons/broadcast.svg',
-                      title: 'Live TV Kategorien',
-                      subtitle:
-                          '${xtreamService.liveCategories?.length ?? 0} Kategorien',
-                    ),
-                    _SettingsItem(
-                      icon: 'assets/icons/film-strip.svg',
-                      title: 'Film Kategorien',
-                      subtitle:
-                          '${xtreamService.vodCategories?.length ?? 0} Kategorien',
-                    ),
-                    _SettingsItem(
-                      icon: 'assets/icons/monitor-play.svg',
-                      title: 'Serien Kategorien',
-                      subtitle:
-                          '${xtreamService.seriesCategories?.length ?? 0} Kategorien',
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Leere Serien ausblenden
-                _buildEmptySeriesSection(colorScheme, xtreamService),
-
-                const SizedBox(height: 24),
-
-                // Spracheinstellungen
-                _buildLanguageSection(colorScheme, xtreamService),
-
-                const SizedBox(height: 24),
-
-                // App Settings
-                _buildAppSection(colorScheme),
-
-                const SizedBox(height: 24),
-
-                // Rechtliches
-                _buildLegalSection(colorScheme),
-
-                const SizedBox(height: 24),
-
-                // Disconnect Button
-                _FocusableProfileItem(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => _confirmDisconnect(context),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colorScheme.error.withAlpha(100)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SvgPicture.asset(
-                          'assets/icons/sign-out.svg',
-                          width: 20,
-                          height: 20,
-                          colorFilter: ColorFilter.mode(
-                            colorScheme.error,
-                            BlendMode.srcIn,
-                          ),
+                    const SizedBox(height: 24),
+                    _buildSection(
+                      context,
+                      'Verfügbare Inhalte',
+                      [
+                        _SettingsItem(
+                          icon: 'assets/icons/broadcast.svg',
+                          title: 'Live TV Kategorien',
+                          subtitle: '${xtreamService.liveCategories?.length ?? 0} Kategorien',
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Verbindung trennen',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w500,
-                            color: colorScheme.error,
-                          ),
+                        _SettingsItem(
+                          icon: 'assets/icons/film-strip.svg',
+                          title: 'Film Kategorien',
+                          subtitle: '${xtreamService.vodCategories?.length ?? 0} Kategorien',
+                        ),
+                        _SettingsItem(
+                          icon: 'assets/icons/monitor-play.svg',
+                          title: 'Serien Kategorien',
+                          subtitle: '${xtreamService.seriesCategories?.length ?? 0} Kategorien',
                         ),
                       ],
                     ),
-                  ),
-                ),
 
-                const SizedBox(height: 100),
-              ],
+                    const SizedBox(height: 24),
+                    _buildEmptySeriesSection(colorScheme, xtreamService),
+
+                    const SizedBox(height: 24),
+                    _buildLanguageSection(colorScheme, xtreamService),
+
+                    const SizedBox(height: 24),
+                    _buildAppSection(colorScheme),
+
+                    const SizedBox(height: 24),
+                    _buildLegalSection(colorScheme),
+
+                    const SizedBox(height: 24),
+                    disconnectButton,
+                  ],
+
+                  const SizedBox(height: 100),
+                ],
+              ),
             ),
           ),
         ),
@@ -1675,10 +1915,10 @@ class _FocusableProfileItemState extends State<_FocusableProfileItem>
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Focus(
       focusNode: _focusNode,
+      canRequestFocus: true,
+      skipTraversal: false,
       autofocus: widget.autofocus,
       onFocusChange: _handleFocusChange,
       onKeyEvent: _handleKeyEvent,

@@ -13,7 +13,7 @@ class ContentCacheService {
   ContentCacheService._internal();
 
   Directory? _cacheDir;
-  static const String _cacheVersion = '1';
+  static const String _cacheVersion = '2'; // v2: allMoviesSorted & allSeriesSorted werden jetzt gecacht
 
   /// Initialisiert das Cache-Verzeichnis
   Future<void> init() async {
@@ -79,9 +79,11 @@ class ContentCacheService {
     try {
       final file = File('${_cacheDir!.path}/start_screen.json');
       final json = _startScreenContentToJson(content);
+      // Speichere auch das Datum für tägliche Invalidierung des Spotlights
+      json['cached_date'] = DateTime.now().toIso8601String().substring(0, 10); // YYYY-MM-DD
       await file.writeAsString(jsonEncode(json));
       await _saveMeta(credentials);
-      debugPrint('StartScreen content cached');
+      debugPrint('StartScreen content cached for ${json['cached_date']}');
     } catch (e) {
       debugPrint('Error caching start screen: $e');
     }
@@ -344,7 +346,7 @@ class ContentCacheService {
         'icon': c.icon,
         'items': c.items.map((m) => m.toJson()).toList(),
       }).toList(),
-      // allMoviesSorted wird NICHT gecacht - zu groß, wird bei Bedarf über API geladen
+      'allMoviesSorted': content.allMoviesSorted.map((m) => m.toJson()).toList(),
     };
   }
 
@@ -357,7 +359,9 @@ class ContentCacheService {
             .map((m) => XTremeCodeVodItem.fromJson(m))
             .toList(),
       )).toList(),
-      allMoviesSorted: [], // Wird bei Bedarf über API geladen
+      allMoviesSorted: (json['allMoviesSorted'] as List? ?? [])
+          .map((m) => XTremeCodeVodItem.fromJson(m))
+          .toList(),
     );
   }
 
@@ -368,7 +372,7 @@ class ContentCacheService {
         'icon': c.icon,
         'items': c.items.map((s) => s.toJson()).toList(),
       }).toList(),
-      // allSeriesSorted wird NICHT gecacht
+      'allSeriesSorted': content.allSeriesSorted.map((s) => s.toJson()).toList(),
     };
   }
 
@@ -381,7 +385,9 @@ class ContentCacheService {
             .map((s) => XTremeCodeSeriesItem.fromJson(s))
             .toList(),
       )).toList(),
-      allSeriesSorted: [], // Wird bei Bedarf über API geladen
+      allSeriesSorted: (json['allSeriesSorted'] as List? ?? [])
+          .map((s) => XTremeCodeSeriesItem.fromJson(s))
+          .toList(),
     );
   }
 
