@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../services/xtream_service.dart';
 import '../utils/content_parser.dart';
 import 'login_screen.dart';
+import 'legal_page_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -771,6 +772,274 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildLegalSection(ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Rechtliches',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface.withAlpha(150),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        // Datenschutz
+        _FocusableProfileItem(
+          onTap: () => _navigateToLegalPage(LegalPageType.privacy),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurface.withAlpha(15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: SvgPicture.asset(
+                      'assets/icons/shield-check.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(180),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Datenschutz',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Datenschutzerklarung',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: colorScheme.onSurface.withAlpha(150),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SvgPicture.asset(
+                    'assets/icons/caret-right.svg',
+                    width: 18,
+                    height: 18,
+                    colorFilter: ColorFilter.mode(
+                      colorScheme.onSurface.withAlpha(100),
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Impressum
+        _FocusableProfileItem(
+          onTap: () => _navigateToLegalPage(LegalPageType.impressum),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(
+                left: BorderSide(color: colorScheme.outline.withAlpha(25), width: 1),
+                right: BorderSide(color: colorScheme.outline.withAlpha(25), width: 1),
+              ),
+            ),
+            child: Column(
+              children: [
+                Divider(
+                  height: 1,
+                  indent: 60,
+                  color: colorScheme.outline.withAlpha(25),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: colorScheme.onSurface.withAlpha(15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: SvgPicture.asset(
+                          'assets/icons/file-text.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.onSurface.withAlpha(180),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Impressum',
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Anbieterkennzeichnung',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: colorScheme.onSurface.withAlpha(150),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SvgPicture.asset(
+                        'assets/icons/caret-right.svg',
+                        width: 18,
+                        height: 18,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.onSurface.withAlpha(100),
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Nutzungsbedingungen
+        _FocusableProfileItem(
+          onTap: () => _navigateToLegalPage(LegalPageType.terms),
+          child: Container(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              border: Border.all(
+                color: colorScheme.outline.withAlpha(25),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              children: [
+                Divider(
+                  height: 1,
+                  indent: 60,
+                  color: colorScheme.outline.withAlpha(25),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: colorScheme.onSurface.withAlpha(15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: SvgPicture.asset(
+                          'assets/icons/scales.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.onSurface.withAlpha(180),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Nutzungsbedingungen',
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'AGB & Haftungsausschluss',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: colorScheme.onSurface.withAlpha(150),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SvgPicture.asset(
+                        'assets/icons/caret-right.svg',
+                        width: 18,
+                        height: 18,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.onSurface.withAlpha(100),
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _navigateToLegalPage(LegalPageType type) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            LegalPageScreen(type: type),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          final tween = Tween(begin: begin, end: end)
+              .chain(CurveTween(curve: Curves.easeOutCubic));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 250),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -967,6 +1236,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // App Settings
                 _buildAppSection(colorScheme),
+
+                const SizedBox(height: 24),
+
+                // Rechtliches
+                _buildLegalSection(colorScheme),
 
                 const SizedBox(height: 24),
 
