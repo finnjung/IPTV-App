@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../services/xtream_service.dart';
 
 class SplashScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -15,6 +17,8 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  bool _minTimeElapsed = false;
+  bool _isExiting = false;
 
   @override
   void initState() {
@@ -41,12 +45,30 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Nach Animation zur App wechseln
-    Future.delayed(const Duration(milliseconds: 2000), () {
+    // Mindestzeit für Splash (damit Logo sichtbar ist)
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) {
-        widget.onComplete();
+        setState(() => _minTimeElapsed = true);
+        _checkAndExit();
       }
     });
+  }
+
+  void _checkAndExit() {
+    if (_isExiting) return;
+
+    final xtreamService = context.read<XtreamService>();
+
+    // Warte bis: Mindestzeit vorbei UND (nicht connected ODER preloading fertig)
+    if (_minTimeElapsed && (!xtreamService.isConnected || !xtreamService.isPreloading)) {
+      _isExiting = true;
+      // Sanfter Übergang
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          widget.onComplete();
+        }
+      });
+    }
   }
 
   @override
@@ -57,6 +79,14 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Auf Preloading-Status hören (für _checkAndExit)
+    context.watch<XtreamService>();
+
+    // Prüfen ob wir jetzt fertig sind
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndExit();
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
       body: Center(
