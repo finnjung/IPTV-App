@@ -1288,6 +1288,7 @@ class XtreamService extends ChangeNotifier {
       categories: _moviesScreenContent!.categories,
       allMoviesSorted: sortedMovies,
     );
+    notifyListeners();
   }
 
   // ==================== Series Screen Content ====================
@@ -1353,6 +1354,7 @@ class XtreamService extends ChangeNotifier {
       categories: _seriesScreenContent!.categories,
       allSeriesSorted: sortedSeries,
     );
+    notifyListeners();
   }
 
   // ==================== Live TV Screen Content ====================
@@ -1418,6 +1420,7 @@ class XtreamService extends ChangeNotifier {
       categories: _liveTvScreenContent!.categories,
       allStreamsSorted: sortedStreams,
     );
+    notifyListeners();
   }
 
   /// Sucht nach Filmen, Serien und Live TV

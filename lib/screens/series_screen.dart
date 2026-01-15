@@ -129,33 +129,56 @@ class _SeriesScreenState extends State<SeriesScreen> {
                         child: SectionHeader(
                           title: 'Alle Serien (A-Z)',
                           icon: 'assets/icons/list.svg',
-                          onSeeAll: _showAllSeries
-                              ? null
-                              : () => setState(() => _showAllSeries = true),
                         ),
                       ),
                     ),
 
-                    // All Series Grid
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: ResponsiveSliverGrid(
-                        itemCount: _showAllSeries
-                            ? content.allSeriesSorted.length
-                            : content.allSeriesSorted.length.clamp(0, 20),
-                        childAspectRatio: 0.7,
-                        itemBuilder: (context, index) {
-                          final series = content.allSeriesSorted[index];
-                          return ContentCard(
-                            title: series.name ?? 'Unbekannt',
-                            subtitle: series.year,
-                            imageUrl: series.cover,
-                            icon: 'assets/icons/monitor-play.svg',
-                            onTap: () => _openSeries(series),
-                          );
-                        },
+                    // All Series Grid - mit Ladeindikator wenn noch leer
+                    if (content.allSeriesSorted.isEmpty)
+                      const SliverToBoxAdapter(
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              children: [
+                                SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Serien werden geladen...',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        sliver: ResponsiveSliverGrid(
+                          itemCount: _showAllSeries
+                              ? content.allSeriesSorted.length
+                              : content.allSeriesSorted.length.clamp(0, 20),
+                          childAspectRatio: 0.7,
+                          itemBuilder: (context, index) {
+                            final series = content.allSeriesSorted[index];
+                            return ContentCard(
+                              title: series.name ?? 'Unbekannt',
+                              subtitle: series.year,
+                              imageUrl: series.cover,
+                              icon: 'assets/icons/monitor-play.svg',
+                              onTap: () => _openSeries(series),
+                            );
+                          },
+                        ),
                       ),
-                    ),
 
                     // Show more button
                     if (!_showAllSeries && content.allSeriesSorted.length > 20)

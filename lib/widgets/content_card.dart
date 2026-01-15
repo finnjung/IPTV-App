@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/content_parser.dart';
+import '../services/navigation_sound_service.dart';
 
 class ContentCard extends StatefulWidget {
   final String title;
@@ -71,6 +72,8 @@ class _ContentCardState extends State<ContentCard>
     });
     if (hasFocus) {
       _scaleController.forward();
+      // Play navigation sound
+      NavigationSoundService().playFocusSound();
       // Smooth scroll zur fokussierten Card
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Primary brand color - Crimson für Premium Entertainment
-  static const Color primaryColor = Color(0xFFE53935);
-  static const Color secondaryColor = Color(0xFFFF5722);
+  // Primary brand color - Violett für Premium Entertainment
+  static const Color primaryColor = Color(0xFF9333EA);
+  static const Color secondaryColor = Color(0xFFA855F7);
 
   // Dark theme colors
   static const Color backgroundDark = Color(0xFF0F0F0F);

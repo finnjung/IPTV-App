@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import '../widgets/responsive_grid.dart';
 import '../models/favorite.dart';
 import '../models/watch_progress.dart';
 import '../utils/content_parser.dart';
+import '../utils/tv_utils.dart';
 import 'player_screen.dart';
 
 class LiveTvScreen extends StatefulWidget {
@@ -70,8 +72,10 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
     return Scaffold(
       body: !xtreamService.isConnected
           ? SafeArea(child: _buildNotConnected(context))
-          : CustomScrollView(
-              slivers: [
+          : FocusTraversalGroup(
+              policy: FlexibleVerticalFocusTraversalPolicy(),
+              child: CustomScrollView(
+                slivers: [
                 // Sticky Glass Header
                 StickyGlassHeader(
                   title: 'Live TV',
@@ -109,10 +113,11 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: SizedBox(
-                        height: 120,
+                        height: 140,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          clipBehavior: Clip.none,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                           itemCount: category.items.length,
                           itemBuilder: (context, index) {
                             final stream = category.items[index];
@@ -138,52 +143,89 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                       child: SectionHeader(
                         title: 'Alle Sender (A-Z)',
                         icon: 'assets/icons/list.svg',
-                        onSeeAll: _showAllStreams
-                            ? null
-                            : () => setState(() => _showAllStreams = true),
                       ),
                     ),
                   ),
 
-                  // All Streams Grid
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: ResponsiveSliverGrid(
-                      itemCount: _showAllStreams
-                          ? content.allStreamsSorted.length
-                          : content.allStreamsSorted.length.clamp(0, 20),
-                      childAspectRatio: 1.3,
-                      itemBuilder: (context, index) {
-                        final stream = content.allStreamsSorted[index];
-                        return ContentCard(
-                          title: stream.name ?? 'Unbekannt',
-                          subtitle: null,
-                          imageUrl: stream.streamIcon,
-                          icon: 'assets/icons/television.svg',
-                          isLive: true,
-                          onTap: () => _playStream(stream),
-                        );
-                      },
+                  // All Streams Grid - mit Ladeindikator wenn noch leer
+                  if (content.allStreamsSorted.isEmpty)
+                    const SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                'Sender werden geladen...',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: ResponsiveSliverGrid(
+                        itemCount: _showAllStreams
+                            ? content.allStreamsSorted.length
+                            : content.allStreamsSorted.length.clamp(0, 20),
+                        childAspectRatio: 1.3,
+                        itemBuilder: (context, index) {
+                          final stream = content.allStreamsSorted[index];
+                          return ContentCard(
+                            title: stream.name ?? 'Unbekannt',
+                            subtitle: null,
+                            imageUrl: stream.streamIcon,
+                            icon: 'assets/icons/television.svg',
+                            isLive: true,
+                            onTap: () => _playStream(stream),
+                          );
+                        },
+                      ),
                     ),
-                  ),
 
                   // Show more button
                   if (!_showAllStreams && content.allStreamsSorted.length > 20)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: OutlinedButton(
-                          onPressed: () => setState(() => _showAllStreams = true),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(
-                              color: colorScheme.outline.withAlpha(50),
-                            ),
-                          ),
-                          child: Text(
-                            'Alle ${content.allStreamsSorted.length} Sender anzeigen',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w500,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 400),
+                            child: Focus(
+                              child: Builder(
+                                builder: (context) {
+                                  final isFocused = Focus.of(context).hasFocus;
+                                  return OutlinedButton(
+                                    onPressed: () => setState(() => _showAllStreams = true),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                      foregroundColor: Colors.white,
+                                      side: BorderSide(
+                                        color: isFocused ? Colors.white : Colors.white.withAlpha(80),
+                                        width: isFocused ? 3 : 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Alle ${content.allStreamsSorted.length} Sender anzeigen',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -194,6 +236,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 const SliverToBoxAdapter(child: SizedBox(height: 100)),
               ],
             ),
+          ),
     );
   }
 
@@ -276,7 +319,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
   }
 }
 
-class _LiveTvCard extends StatelessWidget {
+class _LiveTvCard extends StatefulWidget {
   final XTremeCodeLiveStreamItem stream;
   final VoidCallback onTap;
 
@@ -286,40 +329,128 @@ class _LiveTvCard extends StatelessWidget {
   });
 
   @override
+  State<_LiveTvCard> createState() => _LiveTvCardState();
+}
+
+class _LiveTvCardState extends State<_LiveTvCard>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() {
+      _isFocused = hasFocus;
+    });
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-    final metadata = ContentParser.parse(stream.name ?? '');
-    final favoriteId = 'live_${stream.streamId}';
+    final metadata = ContentParser.parse(widget.stream.name ?? '');
+    final favoriteId = 'live_${widget.stream.streamId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 160,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.outline.withAlpha(25),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: Stack(
-            children: [
-              // Full-size image
-              Positioned.fill(
-                child: Container(
-                  color: colorScheme.onSurface.withAlpha(10),
-                  child: stream.streamIcon != null
-                      ? CachedNetworkImage(
-                          imageUrl: stream.streamIcon!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
-                        )
-                      : _buildPlaceholder(colorScheme),
-                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 160,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused
+                    ? Colors.white
+                    : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
               ),
+              boxShadow: _isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withAlpha(50),
+                        blurRadius: 16,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(_isFocused ? 9 : 11),
+              child: Stack(
+                children: [
+                  // Full-size image
+                  Positioned.fill(
+                    child: Container(
+                      color: colorScheme.onSurface.withAlpha(10),
+                      child: widget.stream.streamIcon != null
+                          ? CachedNetworkImage(
+                              imageUrl: widget.stream.streamIcon!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
+                            )
+                          : _buildPlaceholder(colorScheme),
+                    ),
+                  ),
               // Gradient overlay
               Positioned.fill(
                 child: Container(
@@ -380,9 +511,9 @@ class _LiveTvCard extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () {
                     final favorite = Favorite.fromLiveStream(
-                      streamId: stream.streamId ?? 0,
-                      title: stream.name ?? '',
-                      imageUrl: stream.streamIcon,
+                      streamId: widget.stream.streamId ?? 0,
+                      title: widget.stream.name ?? '',
+                      imageUrl: widget.stream.streamIcon,
                     );
                     xtreamService.toggleFavorite(favorite);
                   },
@@ -445,6 +576,8 @@ class _LiveTvCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),

@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart' hide Icon;
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' as material show Icon;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,8 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
-import '../services/download_service.dart';
-import '../models/download.dart';
 import '../models/watch_progress.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
@@ -20,6 +19,15 @@ class MovieDetailScreen extends StatelessWidget {
 
   const MovieDetailScreen({super.key, required this.movie});
 
+  Widget _buildBackButton(BuildContext context, double macOSTopPadding) {
+    return Padding(
+      padding: EdgeInsets.only(top: macOSTopPadding, left: 4),
+      child: _FocusableBackButton(
+        onPressed: () => Navigator.pop(context),
+      ),
+    );
+  }
+
   bool _isDesktopPlatform() {
     if (kIsWeb) return true;
     return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
@@ -29,7 +37,6 @@ class MovieDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-    final downloadService = context.watch<DownloadService>();
     final metadata = ContentParser.parse(movie.name ?? 'Film');
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = _isDesktopPlatform() && screenWidth >= 768;
@@ -45,11 +52,6 @@ class MovieDetailScreen extends StatelessWidget {
         watchProgress.position.inSeconds > 30 &&
         watchProgress.duration.inSeconds > 0;
 
-    final download = downloadService.getDownload(contentId);
-    final isDownloaded = download?.isCompleted ?? false;
-    final isDownloading = download?.isDownloading ?? false;
-    final downloadProgress = download?.progress ?? 0.0;
-
     // Max button width für Desktop
     final maxButtonWidth = isDesktop ? 400.0 : double.infinity;
 
@@ -63,20 +65,7 @@ class MovieDetailScreen extends StatelessWidget {
             pinned: true,
             backgroundColor: Colors.black,
             toolbarHeight: kToolbarHeight + macOSTopPadding,
-            leading: Padding(
-              padding: EdgeInsets.only(top: macOSTopPadding),
-              child: IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const material.Icon(Icons.arrow_back, color: Colors.white),
-                ),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
+            leading: _buildBackButton(context, macOSTopPadding),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -108,35 +97,6 @@ class MovieDetailScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // Download Badge
-                  if (isDownloaded)
-                    Positioned(
-                      top: MediaQuery.of(context).padding.top + macOSTopPadding + 8,
-                      right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            material.Icon(Icons.download_done, color: Colors.white, size: 16),
-                            const SizedBox(width: 6),
-                            const Text(
-                              'Heruntergeladen',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
 
                   // Title & Info am unteren Rand
                   Positioned(
@@ -204,46 +164,22 @@ class MovieDetailScreen extends StatelessWidget {
                       child: _buildPlayButton(
                         context,
                         xtreamService,
-                        downloadService,
                         watchProgress,
                         hasProgress,
-                        isDownloaded,
                         colorScheme,
                       ),
                     ),
 
                     const SizedBox(height: 12),
 
-                    // Secondary Actions Row
+                    // Favoriten Button
                     SizedBox(
                       width: maxButtonWidth,
-                      child: Row(
-                        children: [
-                          // Download Button
-                          Expanded(
-                            child: _buildDownloadButton(
-                              context,
-                              xtreamService,
-                              downloadService,
-                              download,
-                              isDownloaded,
-                              isDownloading,
-                              downloadProgress,
-                              colorScheme,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-
-                          // Favoriten Button
-                          Expanded(
-                            child: _buildFavoriteButton(
-                              context,
-                              xtreamService,
-                              isFavorite,
-                              colorScheme,
-                            ),
-                          ),
-                        ],
+                      child: _buildFavoriteButton(
+                        context,
+                        xtreamService,
+                        isFavorite,
+                        colorScheme,
                       ),
                     ),
 
@@ -255,8 +191,6 @@ class MovieDetailScreen extends StatelessWidget {
                         child: _buildRestartButton(
                           context,
                           xtreamService,
-                          downloadService,
-                          isDownloaded,
                           colorScheme,
                         ),
                       ),
@@ -320,38 +254,30 @@ class MovieDetailScreen extends StatelessWidget {
   Widget _buildPlayButton(
     BuildContext context,
     XtreamService xtreamService,
-    DownloadService downloadService,
     WatchProgress? watchProgress,
     bool hasProgress,
-    bool isDownloaded,
     ColorScheme colorScheme,
   ) {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton.icon(
-        autofocus: true, // Auto-focus for TV remote navigation
-        onPressed: () => _play(context, xtreamService, downloadService, isDownloaded, resume: hasProgress),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
+      child: _FocusableActionButton(
+        autofocus: true,
+        isPrimary: true,
+        onPressed: () => _play(context, xtreamService, resume: hasProgress),
         icon: SvgPicture.asset(
           'assets/icons/play.svg',
           width: 24,
           height: 24,
           colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn),
         ),
-        label: Text(
-          hasProgress ? 'Weiterschauen' : 'Abspielen',
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+        focusedIcon: SvgPicture.asset(
+          'assets/icons/play.svg',
+          width: 24,
+          height: 24,
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
         ),
+        label: hasProgress ? 'Weiterschauen' : 'Abspielen',
+        padding: const EdgeInsets.symmetric(vertical: 16),
       ),
     );
   }
@@ -359,119 +285,14 @@ class MovieDetailScreen extends StatelessWidget {
   Widget _buildRestartButton(
     BuildContext context,
     XtreamService xtreamService,
-    DownloadService downloadService,
-    bool isDownloaded,
     ColorScheme colorScheme,
   ) {
     return SizedBox(
       width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: () => _play(context, xtreamService, downloadService, isDownloaded, resume: false),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          side: BorderSide(color: Colors.grey[700]!),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        icon: const material.Icon(Icons.refresh, size: 20),
-        label: Text(
-          'Von vorne starten',
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDownloadButton(
-    BuildContext context,
-    XtreamService xtreamService,
-    DownloadService downloadService,
-    Download? download,
-    bool isDownloaded,
-    bool isDownloading,
-    double downloadProgress,
-    ColorScheme colorScheme,
-  ) {
-    if (isDownloading) {
-      return OutlinedButton(
-        onPressed: () => downloadService.pauseDownload(download!.id),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          side: BorderSide(color: Colors.grey[700]!),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                value: downloadProgress,
-                strokeWidth: 2,
-                valueColor: const AlwaysStoppedAnimation(Colors.blue),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '${(downloadProgress * 100).round()}%',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (isDownloaded) {
-      return OutlinedButton.icon(
-        onPressed: () => _showDownloadOptions(context, downloadService, download!),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.green,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          side: const BorderSide(color: Colors.green),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        icon: const material.Icon(Icons.check_circle, size: 20),
-        label: Text(
-          'Geladen',
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      );
-    }
-
-    return OutlinedButton.icon(
-      onPressed: () => _startDownload(context, xtreamService, downloadService),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        side: BorderSide(color: Colors.grey[700]!),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-      icon: const material.Icon(Icons.download_rounded, size: 20),
-      label: Text(
-        'Download',
-        style: GoogleFonts.poppins(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
+      child: _FocusableActionButton(
+        onPressed: () => _play(context, xtreamService, resume: false),
+        icon: const material.Icon(Icons.refresh, size: 20, color: Colors.white),
+        label: 'Von vorne starten',
       ),
     );
   }
@@ -482,7 +303,7 @@ class MovieDetailScreen extends StatelessWidget {
     bool isFavorite,
     ColorScheme colorScheme,
   ) {
-    return OutlinedButton.icon(
+    return _FocusableActionButton(
       onPressed: () {
         final favorite = Favorite.fromMovie(
           streamId: movie.streamId ?? 0,
@@ -492,40 +313,25 @@ class MovieDetailScreen extends StatelessWidget {
         );
         xtreamService.toggleFavorite(favorite);
       },
-      style: OutlinedButton.styleFrom(
-        foregroundColor: isFavorite ? Colors.red : Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        side: BorderSide(color: isFavorite ? Colors.red : Colors.grey[700]!),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
+      foregroundColor: isFavorite ? Colors.red : Colors.white,
+      borderColor: isFavorite ? Colors.red : null,
       icon: material.Icon(
         isFavorite ? Icons.favorite : Icons.favorite_border,
         size: 20,
+        color: isFavorite ? Colors.red : Colors.white,
       ),
-      label: Text(
-        isFavorite ? 'In Liste' : 'Merken',
-        style: GoogleFonts.poppins(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      label: isFavorite ? 'In Liste' : 'Merken',
     );
   }
 
   void _play(
     BuildContext context,
-    XtreamService xtreamService,
-    DownloadService downloadService,
-    bool isDownloaded, {
+    XtreamService xtreamService, {
     required bool resume,
   }) {
     final contentId = 'movie_${movie.streamId}';
 
-    // Lokaler Pfad wenn heruntergeladen
-    final localPath = downloadService.getLocalPath(contentId);
-    final url = localPath ?? xtreamService.getMovieUrl(
+    final url = xtreamService.getMovieUrl(
       movie.streamId ?? 0,
       container: movie.containerExtension ?? 'mp4',
     );
@@ -552,122 +358,6 @@ class MovieDetailScreen extends StatelessWidget {
         ),
       );
     }
-  }
-
-  void _startDownload(
-    BuildContext context,
-    XtreamService xtreamService,
-    DownloadService downloadService,
-  ) {
-    final url = xtreamService.getMovieUrl(
-      movie.streamId ?? 0,
-      container: movie.containerExtension ?? 'mp4',
-    );
-
-    if (url != null) {
-      final metadata = ContentParser.parse(movie.name ?? 'Film');
-      final download = Download.fromMovie(
-        streamId: movie.streamId ?? 0,
-        title: metadata.cleanName,
-        sourceUrl: url,
-        imageUrl: movie.streamIcon,
-        extension: movie.containerExtension ?? 'mp4',
-      );
-      downloadService.addDownload(download);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              material.Icon(Icons.download_rounded, color: Colors.blue, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Download gestartet',
-                  style: TextStyle(color: Colors.grey[200]),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.grey[850],
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  void _showDownloadOptions(
-    BuildContext context,
-    DownloadService downloadService,
-    Download download,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[700],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            ListTile(
-              leading: const material.Icon(Icons.save_alt, color: Colors.white),
-              title: Text(
-                'In Downloads-Ordner exportieren',
-                style: GoogleFonts.poppins(color: Colors.white),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                final path = await downloadService.exportDownload(download.id);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        path != null ? 'Exportiert!' : 'Export fehlgeschlagen',
-                      ),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              },
-            ),
-
-            ListTile(
-              leading: const material.Icon(Icons.delete_outline, color: Colors.red),
-              title: Text(
-                'Download löschen',
-                style: GoogleFonts.poppins(color: Colors.red),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                downloadService.deleteDownload(download.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Download gelöscht'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildTag(String text, {bool isPrimary = false}) {
@@ -803,7 +493,6 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final xtreamService = context.watch<XtreamService>();
-    final downloadService = context.watch<DownloadService>();
     final metadata = ContentParser.parse(movieTitle);
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = _isDesktopPlatform() && screenWidth >= 768;
@@ -817,9 +506,6 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
     final hasProgress = watchProgress != null &&
         watchProgress.position.inSeconds > 30 &&
         watchProgress.duration.inSeconds > 0;
-
-    final download = downloadService.getDownload(contentId);
-    final isDownloaded = download?.isCompleted ?? false;
 
     // Max button width für Desktop
     final maxButtonWidth = isDesktop ? 400.0 : double.infinity;
@@ -835,16 +521,8 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
             backgroundColor: Colors.black,
             toolbarHeight: kToolbarHeight + macOSTopPadding,
             leading: Padding(
-              padding: EdgeInsets.only(top: macOSTopPadding),
-              child: IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const material.Icon(Icons.arrow_back, color: Colors.white),
-                ),
+              padding: EdgeInsets.only(top: macOSTopPadding, left: 4),
+              child: _FocusableBackButton(
                 onPressed: () => Navigator.pop(context),
               ),
             ),
@@ -929,29 +607,24 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
                     // Play Button
                     SizedBox(
                       width: maxButtonWidth,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _play(context, xtreamService, downloadService, isDownloaded, resume: hasProgress),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                      child: _FocusableActionButton(
+                        autofocus: true,
+                        isPrimary: true,
+                        onPressed: () => _play(context, xtreamService, resume: hasProgress),
                         icon: SvgPicture.asset(
                           'assets/icons/play.svg',
                           width: 24,
                           height: 24,
                           colorFilter: const ColorFilter.mode(Colors.black, BlendMode.srcIn),
                         ),
-                        label: Text(
-                          hasProgress ? 'Weiterschauen' : 'Abspielen',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        focusedIcon: SvgPicture.asset(
+                          'assets/icons/play.svg',
+                          width: 24,
+                          height: 24,
+                          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
                         ),
+                        label: hasProgress ? 'Weiterschauen' : 'Abspielen',
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
 
@@ -959,24 +632,10 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       SizedBox(
                         width: maxButtonWidth,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _play(context, xtreamService, downloadService, isDownloaded, resume: false),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(color: Colors.grey[700]!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          icon: const material.Icon(Icons.refresh, size: 20),
-                          label: Text(
-                            'Von vorne starten',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                        child: _FocusableActionButton(
+                          onPressed: () => _play(context, xtreamService, resume: false),
+                          icon: const material.Icon(Icons.refresh, size: 20, color: Colors.white),
+                          label: 'Von vorne starten',
                         ),
                       ),
                     ],
@@ -1037,14 +696,11 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
 
   void _play(
     BuildContext context,
-    XtreamService xtreamService,
-    DownloadService downloadService,
-    bool isDownloaded, {
+    XtreamService xtreamService, {
     required bool resume,
   }) {
     final contentId = 'movie_$streamId';
-    final localPath = downloadService.getLocalPath(contentId);
-    final url = localPath ?? xtreamService.getMovieUrl(
+    final url = xtreamService.getMovieUrl(
       streamId,
       container: containerExtension ?? 'mp4',
     );
@@ -1104,6 +760,259 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
             Colors.grey[700]!,
             BlendMode.srcIn,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fokussierbarer Zurück-Button mit animiertem Rahmen
+class _FocusableBackButton extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const _FocusableBackButton({required this.onPressed});
+
+  @override
+  State<_FocusableBackButton> createState() => _FocusableBackButtonState();
+}
+
+class _FocusableBackButtonState extends State<_FocusableBackButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _borderAnimation;
+  late Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _borderAnimation = Tween<double>(begin: 0.0, end: 3.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    if (hasFocus) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        widget.onPressed();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedBuilder(
+          animation: _animationController,
+          builder: (context, child) {
+            return Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(12),
+                border: _borderAnimation.value > 0
+                    ? Border.all(
+                        color: Colors.white,
+                        width: _borderAnimation.value,
+                      )
+                    : null,
+                boxShadow: _glowAnimation.value > 0
+                    ? [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.3 * _glowAnimation.value),
+                          blurRadius: 8 * _glowAnimation.value,
+                          spreadRadius: 1 * _glowAnimation.value,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: const material.Icon(Icons.arrow_back, color: Colors.white),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Fokussierbarer Action-Button mit animiertem Rahmen
+class _FocusableActionButton extends StatefulWidget {
+  final VoidCallback? onPressed;
+  final Widget? icon;
+  final Widget? focusedIcon;
+  final String? label;
+  final Widget? child;
+  final bool isPrimary;
+  final bool autofocus;
+  final Color? foregroundColor;
+  final Color? borderColor;
+  final EdgeInsetsGeometry padding;
+
+  const _FocusableActionButton({
+    required this.onPressed,
+    this.label,
+    this.icon,
+    this.focusedIcon,
+    this.child,
+    this.isPrimary = false,
+    this.autofocus = false,
+    this.foregroundColor,
+    this.borderColor,
+    this.padding = const EdgeInsets.symmetric(vertical: 14),
+  });
+
+  @override
+  State<_FocusableActionButton> createState() => _FocusableActionButtonState();
+}
+
+class _FocusableActionButtonState extends State<_FocusableActionButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _focusAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _focusAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    if (hasFocus) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent && widget.onPressed != null) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        widget.onPressed!();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Standard-Werte für unfokussierten Zustand
+    final normalBgColor = widget.isPrimary ? Colors.white : Colors.transparent;
+    final normalFgColor = widget.foregroundColor ?? (widget.isPrimary ? Colors.black : Colors.white);
+    final normalBorderColor = widget.borderColor ?? (widget.isPrimary ? Colors.transparent : Colors.grey[700]!);
+
+    // Fokussierte Werte
+    const focusBorderColor = Colors.white;
+    const focusFgColor = Colors.white;
+    final focusBgColor = Colors.transparent;
+
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedBuilder(
+          animation: _animationController,
+          builder: (context, child) {
+            final borderWidth = 1.0 + (_focusAnimation.value * 2.0); // 1 -> 3
+
+            // Animierte Farben für Primary Button
+            final currentBgColor = widget.isPrimary
+                ? Color.lerp(normalBgColor, focusBgColor, _focusAnimation.value)!
+                : normalBgColor;
+            final currentFgColor = widget.isPrimary
+                ? Color.lerp(normalFgColor, focusFgColor, _focusAnimation.value)!
+                : normalFgColor;
+            final currentBorderColor = Color.lerp(normalBorderColor, focusBorderColor, _focusAnimation.value)!;
+
+            return Container(
+              padding: widget.padding,
+              decoration: BoxDecoration(
+                color: currentBgColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: currentBorderColor,
+                  width: borderWidth,
+                ),
+              ),
+              child: widget.child ?? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (widget.icon != null) ...[
+                    // Smooth icon crossfade mit Stack und Opacity
+                    if (widget.focusedIcon != null)
+                      Stack(
+                        children: [
+                          Opacity(
+                            opacity: 1.0 - _focusAnimation.value,
+                            child: widget.icon,
+                          ),
+                          Opacity(
+                            opacity: _focusAnimation.value,
+                            child: widget.focusedIcon,
+                          ),
+                        ],
+                      )
+                    else
+                      widget.icon!,
+                    const SizedBox(width: 8),
+                  ],
+                  if (widget.label != null)
+                    Text(
+                      widget.label!,
+                      style: GoogleFonts.poppins(
+                        fontSize: widget.isPrimary ? 16 : 14,
+                        fontWeight: widget.isPrimary ? FontWeight.w600 : FontWeight.w500,
+                        color: currentFgColor,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );

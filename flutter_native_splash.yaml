@@ -1,0 +1,28 @@
+flutter_native_splash:
+  # Hintergrundfarbe - dunkles Schwarz passend zum App-Theme
+  color: "#0F0F0F"
+
+  # Logo in der Mitte
+  image: assets/images/streameee-logo.png
+
+  # Logo-Breite für verschiedene Plattformen
+  # Auf Android wird das Bild automatisch skaliert
+
+  # Android 12+ Splash Screen
+  android_12:
+    color: "#0F0F0F"
+    image: assets/images/streameee-logo.png
+    icon_background_color: "#0F0F0F"
+
+  # iOS Konfiguration
+  ios: true
+
+  # Web Konfiguration
+  web: true
+
+  # Desktop Konfiguration (macOS, Windows, Linux)
+  # Hinweis: flutter_native_splash unterstützt keine Desktop-Plattformen nativ
+  # Wir verwenden später einen Flutter-basierten Splash für Desktop
+
+  # Vollbild-Modus
+  fullscreen: true

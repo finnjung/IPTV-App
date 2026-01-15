@@ -129,33 +129,56 @@ class _MoviesScreenState extends State<MoviesScreen> {
                       child: SectionHeader(
                         title: 'Alle Filme (A-Z)',
                         icon: 'assets/icons/list.svg',
-                        onSeeAll: _showAllMovies
-                            ? null
-                            : () => setState(() => _showAllMovies = true),
                       ),
                     ),
                   ),
 
-                  // All Movies Grid
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: ResponsiveSliverGrid(
-                      itemCount: _showAllMovies
-                          ? content.allMoviesSorted.length
-                          : content.allMoviesSorted.length.clamp(0, 20),
-                      childAspectRatio: 0.7,
-                      itemBuilder: (context, index) {
-                        final movie = content.allMoviesSorted[index];
-                        return ContentCard(
-                          title: movie.name ?? 'Unbekannt',
-                          subtitle: movie.year,
-                          imageUrl: movie.streamIcon,
-                          icon: 'assets/icons/film-strip.svg',
-                          onTap: () => _showMovieDetail(movie),
-                        );
-                      },
+                  // All Movies Grid - mit Ladeindikator wenn noch leer
+                  if (content.allMoviesSorted.isEmpty)
+                    const SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                'Filme werden geladen...',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: ResponsiveSliverGrid(
+                        itemCount: _showAllMovies
+                            ? content.allMoviesSorted.length
+                            : content.allMoviesSorted.length.clamp(0, 20),
+                        childAspectRatio: 0.7,
+                        itemBuilder: (context, index) {
+                          final movie = content.allMoviesSorted[index];
+                          return ContentCard(
+                            title: movie.name ?? 'Unbekannt',
+                            subtitle: movie.year,
+                            imageUrl: movie.streamIcon,
+                            icon: 'assets/icons/film-strip.svg',
+                            onTap: () => _showMovieDetail(movie),
+                          );
+                        },
+                      ),
                     ),
-                  ),
 
                   // Show more button
                   if (!_showAllMovies && content.allMoviesSorted.length > 20)

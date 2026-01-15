@@ -7,11 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:xtream_code_client/xtream_code_client.dart';
 import '../services/xtream_service.dart';
-import '../services/download_service.dart';
 import '../models/watch_progress.dart';
 import '../models/favorite.dart';
 import '../utils/content_parser.dart';
-import '../widgets/episode_download_button.dart';
 import 'player_screen.dart';
 
 // Hilfsfunktion für Episode Content ID
@@ -69,16 +67,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   void _playEpisode(XTremeCodeEpisode episode, int seasonNum, {bool resume = true}) {
     final xtreamService = context.read<XtreamService>();
-    final downloadService = context.read<DownloadService>();
     final contentId = _getEpisodeContentId(
       widget.series.seriesId ?? 0,
       seasonNum,
       episode.episodeNum ?? 1,
     );
 
-    // Prüfe ob offline verfügbar
-    final localPath = downloadService.getLocalPath(contentId);
-    final url = localPath ?? xtreamService.getSeriesEpisodeUrl(
+    final url = xtreamService.getSeriesEpisodeUrl(
       episode.id ?? 0,
       container: episode.containerExtension ?? 'mp4',
     );
@@ -654,28 +649,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                // Season Download Button
-                if (_seriesInfo?.episodes != null &&
-                    _seriesInfo?.seasons != null &&
-                    _seriesInfo!.seasons!.isNotEmpty &&
-                    _selectedSeason < _seriesInfo!.seasons!.length)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: SeasonDownloadButton(
-                        seriesId: widget.series.seriesId ?? 0,
-                        seriesName: widget.series.name ?? 'Serie',
-                        seriesCover: widget.series.cover,
-                        seasonNumber: _seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1,
-                        episodes: _seriesInfo!.episodes?[
-                            (_seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1).toString()
-                        ] ?? [],
-                      ),
-                    ),
-                  ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
                 // Episodes
                 if (_seriesInfo?.episodes != null &&
                     _seriesInfo?.seasons != null &&
@@ -896,15 +869,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             ],
                           ),
                         ),
-                        // Download Button
-                        EpisodeDownloadButton(
-                          seriesId: widget.series.seriesId ?? 0,
-                          seriesName: widget.series.name ?? 'Serie',
-                          seriesCover: widget.series.cover,
-                          episode: episode,
-                          seasonNumber: seasonNumber ?? 1,
-                        ),
-                        const SizedBox(width: 4),
                         // Play/Resume Button
                         Container(
                           padding: const EdgeInsets.all(10),
@@ -1014,16 +978,13 @@ class _SeriesDetailScreenFromFavoriteState
 
   void _playEpisode(XTremeCodeEpisode episode, int seasonNum, {bool resume = true}) {
     final xtreamService = context.read<XtreamService>();
-    final downloadService = context.read<DownloadService>();
     final contentId = _getEpisodeContentId(
       widget.seriesId,
       seasonNum,
       episode.episodeNum ?? 1,
     );
 
-    // Prüfe ob offline verfügbar
-    final localPath = downloadService.getLocalPath(contentId);
-    final url = localPath ?? xtreamService.getSeriesEpisodeUrl(
+    final url = xtreamService.getSeriesEpisodeUrl(
       episode.id ?? 0,
       container: episode.containerExtension ?? 'mp4',
     );
@@ -1601,28 +1562,6 @@ class _SeriesDetailScreenFromFavoriteState
 
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                // Season Download Button
-                if (_seriesInfo?.episodes != null &&
-                    _seriesInfo?.seasons != null &&
-                    _seriesInfo!.seasons!.isNotEmpty &&
-                    _selectedSeason < _seriesInfo!.seasons!.length)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: SeasonDownloadButton(
-                        seriesId: widget.seriesId,
-                        seriesName: widget.seriesName,
-                        seriesCover: widget.seriesCover,
-                        seasonNumber: _seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1,
-                        episodes: _seriesInfo!.episodes?[
-                            (_seriesInfo!.seasons![_selectedSeason].seasonNumber ?? 1).toString()
-                        ] ?? [],
-                      ),
-                    ),
-                  ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
                 // Episodes
                 if (_seriesInfo?.episodes != null &&
                     _seriesInfo?.seasons != null &&
@@ -1841,15 +1780,6 @@ class _SeriesDetailScreenFromFavoriteState
                             ],
                           ),
                         ),
-                        // Download Button
-                        EpisodeDownloadButton(
-                          seriesId: widget.seriesId,
-                          seriesName: widget.seriesName,
-                          seriesCover: widget.seriesCover,
-                          episode: episode,
-                          seasonNumber: seasonNumber ?? 1,
-                        ),
-                        const SizedBox(width: 4),
                         // Play/Resume Button
                         Container(
                           padding: const EdgeInsets.all(10),

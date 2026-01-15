@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/navigation_sound_service.dart';
 
 /// Platform channel for TV detection on Android
 const _tvDetectionChannel = MethodChannel('com.iptv.iptv_app/tv_detection');
@@ -164,6 +165,8 @@ class _TvFocusableState extends State<TvFocusable>
     if (hasFocus) {
       _animationController.forward();
       widget.onFocus?.call();
+      // Play navigation sound when gaining focus
+      NavigationSoundService().playFocusSound();
     } else {
       _animationController.reverse();
       widget.onUnfocus?.call();
@@ -413,16 +416,37 @@ class FlexibleVerticalFocusTraversalPolicy extends FocusTraversalPolicy
 
   /// Filter nodes to only include actual interactive elements (reasonable size)
   /// This filters out Focus wrappers (0x0 or tiny) and large containers
-  List<FocusNode> _filterContentNodes(Iterable<FocusNode> nodes) {
+  List<FocusNode> _filterContentNodes(Iterable<FocusNode> nodes, {bool debug = false}) {
+    if (debug) {
+      debugPrint('[Filter] === Filtering ${nodes.length} nodes ===');
+      for (final node in nodes) {
+        final rect = node.rect;
+        final area = rect.width * rect.height;
+        debugPrint('[Filter] Node: ${rect.width.toInt()}x${rect.height.toInt()} area=${area.toInt()} Y=${rect.center.dy.toInt()}');
+      }
+    }
+
     return nodes.where((node) {
       final rect = node.rect;
       // Filter out nodes that are too small or too large
       // Content cards: ~130x200, Buttons: ~400x50, Small cards: ~90x90
+      // Back buttons: ~40x40, Search fields: ~600x50
       // Focus wrappers are often 0x0, containers are screen-sized
       final area = rect.width * rect.height;
-      final isNotTooSmall = area > 3000 && rect.width > 50 && rect.height > 30;
-      final isNotTooLarge = rect.width < 500 && rect.height < 400;
-      return isNotTooSmall && isNotTooLarge;
+
+      // Allow small buttons (like back button ~40x40 = 1600)
+      final isNotTooSmall = area > 800 && rect.width > 30 && rect.height > 30;
+
+      // Allow wide elements if they're not too tall (like search fields, buttons)
+      // But filter out large containers (screen-sized)
+      final isNotTooLarge = (rect.width < 500 && rect.height < 400) ||
+          (rect.width < 800 && rect.height < 80); // Wide buttons/search fields OK
+
+      final passes = isNotTooSmall && isNotTooLarge;
+      if (debug && !passes) {
+        debugPrint('[Filter] REJECTED: ${rect.width.toInt()}x${rect.height.toInt()} small=$isNotTooSmall large=$isNotTooLarge');
+      }
+      return passes;
     }).toList();
   }
 
@@ -479,21 +503,178 @@ class FlexibleVerticalFocusTraversalPolicy extends FocusTraversalPolicy
     return sorted;
   }
 
+  /// Check if two rows belong to the same grid section
+  /// Rows are considered part of the same grid if:
+  /// - They have similar element counts (within 2 elements difference, or both have 3+)
+  /// - The vertical gap between them is not too large (< 300px)
+  bool _rowsInSameSection(List<FocusNode> row1, List<FocusNode> row2, {bool debug = false}) {
+    if (row1.isEmpty || row2.isEmpty) {
+      if (debug) debugPrint('[SameSection] Empty row - false');
+      return false;
+    }
+
+    // Check vertical distance - rows in same grid are typically close together
+    final row1Y = row1.first.rect.center.dy;
+    final row2Y = row2.first.rect.center.dy;
+    final verticalGap = (row1Y - row2Y).abs();
+
+    if (debug) {
+      debugPrint('[SameSection] Row1: ${row1.length} elements at Y=${row1Y.toInt()}');
+      debugPrint('[SameSection] Row2: ${row2.length} elements at Y=${row2Y.toInt()}');
+      debugPrint('[SameSection] Vertical gap: ${verticalGap.toInt()}px');
+    }
+
+    // If rows are more than 300px apart, they're likely in different sections
+    if (verticalGap > 300) {
+      if (debug) debugPrint('[SameSection] Gap > 300px - different sections');
+      return false;
+    }
+
+    // Check if rows have similar structure (both are grid rows with 3+ elements)
+    final bothAreGridRows = row1.length >= 3 && row2.length >= 3;
+    if (bothAreGridRows) {
+      if (debug) debugPrint('[SameSection] Both have 3+ elements - same section');
+      return true;
+    }
+
+    // For smaller rows, check if element counts are similar
+    final countDiff = (row1.length - row2.length).abs();
+    final result = countDiff <= 2;
+    if (debug) debugPrint('[SameSection] Count diff: $countDiff, result: $result');
+    return result;
+  }
+
+  /// Handle horizontal navigation with wrap-around behavior
+  /// When at the right edge and pressing right -> go to first element of next row (same section only)
+  /// When at the left edge and pressing left -> go to last element of previous row (same section only)
+  bool _handleHorizontalNavigation(
+      FocusNode currentNode, FocusScopeNode scope, TraversalDirection direction) {
+    debugPrint('[HorizNav] === Starting horizontal navigation: $direction ===');
+
+    final List<FocusNode> allNodes = _filterContentNodes(scope.traversalDescendants);
+
+    if (!allNodes.contains(currentNode)) {
+      allNodes.add(currentNode);
+    }
+
+    debugPrint('[HorizNav] Total filtered nodes: ${allNodes.length}');
+
+    if (allNodes.length < 2) {
+      debugPrint('[HorizNav] Less than 2 nodes, using default behavior');
+      return super.inDirection(currentNode, direction);
+    }
+
+    final rows = _groupIntoRows(allNodes);
+    debugPrint('[HorizNav] Grouped into ${rows.length} rows:');
+    for (int i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.isNotEmpty) {
+        debugPrint('[HorizNav]   Row $i: ${row.length} elements, Y=${row.first.rect.center.dy.toInt()}');
+      }
+    }
+
+    if (rows.isEmpty) {
+      return super.inDirection(currentNode, direction);
+    }
+
+    // Find current position
+    int currentRowIndex = -1;
+    int currentColIndex = -1;
+
+    for (int r = 0; r < rows.length; r++) {
+      final colIdx = rows[r].indexOf(currentNode);
+      if (colIdx != -1) {
+        currentRowIndex = r;
+        currentColIndex = colIdx;
+        break;
+      }
+    }
+
+    debugPrint('[HorizNav] Current position: row=$currentRowIndex, col=$currentColIndex');
+    debugPrint('[HorizNav] Current node rect: ${currentNode.rect}');
+
+    if (currentRowIndex == -1) {
+      debugPrint('[HorizNav] Current node not found in rows, using default');
+      return super.inDirection(currentNode, direction);
+    }
+
+    final currentRow = rows[currentRowIndex];
+    debugPrint('[HorizNav] Current row has ${currentRow.length} elements');
+
+    if (direction == TraversalDirection.right) {
+      debugPrint('[HorizNav] Going RIGHT, at col $currentColIndex of ${currentRow.length - 1}');
+
+      // If not at the right edge, use default behavior
+      if (currentColIndex < currentRow.length - 1) {
+        debugPrint('[HorizNav] Not at right edge, using default');
+        return super.inDirection(currentNode, direction);
+      }
+
+      // At right edge: wrap to next row's first element (only if in same section)
+      final targetRowIndex = currentRowIndex + 1;
+      debugPrint('[HorizNav] At right edge! Checking target row $targetRowIndex');
+
+      // Only wrap if target row is in the same grid section
+      if (targetRowIndex < rows.length && rows[targetRowIndex].isNotEmpty) {
+        debugPrint('[HorizNav] Target row exists, checking if same section...');
+        final sameSection = _rowsInSameSection(currentRow, rows[targetRowIndex], debug: true);
+
+        if (sameSection) {
+          debugPrint('[HorizNav] WRAP: right edge -> first of row $targetRowIndex');
+          rows[targetRowIndex].first.requestFocus();
+          return true;
+        }
+      }
+
+      // Target row is in different section, don't wrap - stay at current position
+      debugPrint('[HorizNav] Target row is different section or doesn\'t exist, NOT wrapping');
+      return false;
+    } else {
+      // TraversalDirection.left
+      debugPrint('[HorizNav] Going LEFT, at col $currentColIndex');
+
+      // If not at the left edge, use default behavior
+      if (currentColIndex > 0) {
+        debugPrint('[HorizNav] Not at left edge, using default');
+        return super.inDirection(currentNode, direction);
+      }
+
+      // At left edge: wrap to previous row's last element (only if in same section)
+      final targetRowIndex = currentRowIndex - 1;
+      debugPrint('[HorizNav] At left edge! Checking target row $targetRowIndex');
+
+      // Only wrap if target row is in the same grid section
+      if (targetRowIndex >= 0 && rows[targetRowIndex].isNotEmpty) {
+        debugPrint('[HorizNav] Target row exists, checking if same section...');
+        final sameSection = _rowsInSameSection(currentRow, rows[targetRowIndex], debug: true);
+
+        if (sameSection) {
+          debugPrint('[HorizNav] WRAP: left edge -> last of row $targetRowIndex');
+          rows[targetRowIndex].last.requestFocus();
+          return true;
+        }
+      }
+
+      // Target row is in different section, don't wrap - stay at current position
+      debugPrint('[HorizNav] Target row is different section or doesn\'t exist, NOT wrapping');
+      return false;
+    }
+  }
+
   @override
   bool inDirection(FocusNode currentNode, TraversalDirection direction) {
     // Reset the escape flag at the start of each navigation
     shouldEscapeToNavBar = false;
 
-    // For horizontal navigation, use default behavior
-    if (direction == TraversalDirection.left ||
-        direction == TraversalDirection.right) {
+    final FocusScopeNode? scope = currentNode.nearestScope;
+    if (scope == null) {
       return super.inDirection(currentNode, direction);
     }
 
-    final FocusScopeNode? scope = currentNode.nearestScope;
-    if (scope == null) {
-      debugPrint('[FocusPolicy] No scope found');
-      return super.inDirection(currentNode, direction);
+    // For horizontal navigation, implement wrap-around behavior
+    if (direction == TraversalDirection.left ||
+        direction == TraversalDirection.right) {
+      return _handleHorizontalNavigation(currentNode, scope, direction);
     }
 
     // Filter to only include actual content cards (nodes with reasonable size)

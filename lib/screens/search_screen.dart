@@ -27,7 +27,7 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  late final FocusNode _focusNode;
   Timer? _debounce;
   SearchResults _results = SearchResults.empty();
   bool _isSearching = false;
@@ -58,6 +58,8 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize focus node - key event handling is done in build method with context
+    _focusNode = FocusNode();
     // Listen to search controller changes for TV keyboard
     _searchController.addListener(_onSearchControllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -221,13 +223,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: Stack(
-        children: [
-          // Content (scrollt unter dem Header)
-          _buildContentWithPadding(colorScheme, headerHeight),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Stack(
+          children: [
+            // Content (scrollt unter dem Header)
+            _buildContentWithPadding(colorScheme, headerHeight),
 
-          // Header mit Gradient (schwebt über dem Content)
-          Positioned(
+            // Header mit Gradient (schwebt über dem Content)
+            Positioned(
             top: 0,
             left: 0,
             right: 0,
@@ -251,22 +255,38 @@ class _SearchScreenState extends State<SearchScreen> {
                   children: [
                     Row(
                       children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: SvgPicture.asset(
-                              'assets/icons/arrow-left.svg',
-                              width: 24,
-                              height: 24,
-                              colorFilter: ColorFilter.mode(
-                                colorScheme.onSurface,
-                                BlendMode.srcIn,
-                              ),
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(0),
+                          child: Focus(
+                            child: Builder(
+                              builder: (context) {
+                                final isFocused = Focus.of(context).hasFocus;
+                                return GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 150),
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: isFocused
+                                          ? Colors.white
+                                          : colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: isFocused
+                                          ? Border.all(color: Colors.white, width: 2)
+                                          : null,
+                                    ),
+                                    child: SvgPicture.asset(
+                                      'assets/icons/arrow-left.svg',
+                                      width: 24,
+                                      height: 24,
+                                      colorFilter: ColorFilter.mode(
+                                        isFocused ? Colors.black : colorScheme.onSurface,
+                                        BlendMode.srcIn,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -285,129 +305,12 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     const SizedBox(height: 20),
                     // Suchfeld - TV-kompatibel
-                    GestureDetector(
-                      onTap: _isTvDevice
-                          ? () => setState(() => _showTvKeyboard = true)
-                          : null,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16),
-                          border: _showTvKeyboard
-                              ? Border.all(color: Colors.white, width: 2)
-                              : null,
-                        ),
-                        child: _isTvDevice && _showTvKeyboard
-                            ? Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 16,
-                                ),
-                                child: Row(
-                                  children: [
-                                    SvgPicture.asset(
-                                      'assets/icons/magnifying-glass.svg',
-                                      width: 22,
-                                      height: 22,
-                                      colorFilter: ColorFilter.mode(
-                                        colorScheme.onSurface.withAlpha(150),
-                                        BlendMode.srcIn,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Text(
-                                        _searchController.text.isEmpty
-                                            ? 'Filme, Serien, Live TV...'
-                                            : _searchController.text,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 16,
-                                          color: _searchController.text.isEmpty
-                                              ? colorScheme.onSurface.withAlpha(100)
-                                              : colorScheme.onSurface,
-                                        ),
-                                      ),
-                                    ),
-                                    if (_searchController.text.isNotEmpty)
-                                      GestureDetector(
-                                        onTap: () {
-                                          _searchController.clear();
-                                          _onSearchChanged('');
-                                        },
-                                        child: SvgPicture.asset(
-                                          'assets/icons/x.svg',
-                                          width: 20,
-                                          height: 20,
-                                          colorFilter: ColorFilter.mode(
-                                            colorScheme.onSurface.withAlpha(150),
-                                            BlendMode.srcIn,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              )
-                            : TextField(
-                                controller: _searchController,
-                                focusNode: _focusNode,
-                                onChanged: _onSearchChanged,
-                                onTap: _isTvDevice
-                                    ? () => setState(() => _showTvKeyboard = true)
-                                    : null,
-                                readOnly: _isTvDevice,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  color: colorScheme.onSurface,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Filme, Serien, Live TV...',
-                                  hintStyle: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    color: colorScheme.onSurface.withAlpha(100),
-                                  ),
-                                  prefixIcon: Padding(
-                                    padding: const EdgeInsets.all(14),
-                                    child: SvgPicture.asset(
-                                      'assets/icons/magnifying-glass.svg',
-                                      width: 22,
-                                      height: 22,
-                                      colorFilter: ColorFilter.mode(
-                                        colorScheme.onSurface.withAlpha(150),
-                                        BlendMode.srcIn,
-                                      ),
-                                    ),
-                                  ),
-                                  suffixIcon: _searchController.text.isNotEmpty
-                                      ? GestureDetector(
-                                          onTap: () {
-                                            _searchController.clear();
-                                            _onSearchChanged('');
-                                          },
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(14),
-                                            child: SvgPicture.asset(
-                                              'assets/icons/x.svg',
-                                              width: 20,
-                                              height: 20,
-                                              colorFilter: ColorFilter.mode(
-                                                colorScheme.onSurface.withAlpha(150),
-                                                BlendMode.srcIn,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      : null,
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 16,
-                                  ),
-                                ),
-                              ),
-                      ),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(1),
+                      child: _buildSearchField(colorScheme),
                     ),
                     // TV Keyboard
-                    if (_showTvKeyboard) ...[
+                    if (_isTvDevice && _showTvKeyboard) ...[
                       const SizedBox(height: 16),
                       TvKeyboard(
                         controller: _searchController,
@@ -427,7 +330,156 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ],
         ),
+      ),
     );
+  }
+
+  Widget _buildSearchField(ColorScheme colorScheme) {
+    if (_isTvDevice) {
+      // TV: Fokussierbarer Container statt TextField
+      return Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter) {
+              setState(() => _showTvKeyboard = true);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Builder(
+          builder: (context) {
+            final isFocused = Focus.of(context).hasFocus;
+            return GestureDetector(
+              onTap: () => setState(() => _showTvKeyboard = true),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: (isFocused || _showTvKeyboard)
+                      ? Border.all(color: Colors.white, width: 2)
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    SvgPicture.asset(
+                      'assets/icons/magnifying-glass.svg',
+                      width: 22,
+                      height: 22,
+                      colorFilter: ColorFilter.mode(
+                        colorScheme.onSurface.withAlpha(150),
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        _searchController.text.isEmpty
+                            ? 'Filme, Serien, Live TV...'
+                            : _searchController.text,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: _searchController.text.isEmpty
+                              ? colorScheme.onSurface.withAlpha(100)
+                              : colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (_searchController.text.isNotEmpty)
+                      GestureDetector(
+                        onTap: () {
+                          _searchController.clear();
+                          _onSearchChanged('');
+                        },
+                        child: SvgPicture.asset(
+                          'assets/icons/x.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.onSurface.withAlpha(150),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    } else {
+      // Non-TV: TextField mit Shortcuts für Pfeiltasten-Navigation
+      return Shortcuts(
+        shortcuts: {
+          const SingleActivator(LogicalKeyboardKey.arrowUp): const PreviousFocusIntent(),
+          const SingleActivator(LogicalKeyboardKey.arrowDown): const NextFocusIntent(),
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: TextField(
+            controller: _searchController,
+            focusNode: _focusNode,
+            onChanged: _onSearchChanged,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              color: colorScheme.onSurface,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Filme, Serien, Live TV...',
+              hintStyle: GoogleFonts.poppins(
+                fontSize: 16,
+                color: colorScheme.onSurface.withAlpha(100),
+              ),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.all(14),
+                child: SvgPicture.asset(
+                  'assets/icons/magnifying-glass.svg',
+                  width: 22,
+                  height: 22,
+                  colorFilter: ColorFilter.mode(
+                    colorScheme.onSurface.withAlpha(150),
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: SvgPicture.asset(
+                          'assets/icons/x.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.onSurface.withAlpha(150),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 16,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildContentWithPadding(ColorScheme colorScheme, double topPadding) {
@@ -513,29 +565,41 @@ class _SearchScreenState extends State<SearchScreen> {
             );
           },
           child: searchHistory.isNotEmpty
-              ? _buildSearchHistorySection(colorScheme, searchHistory)
+              ? FocusTraversalOrder(
+                  order: const NumericFocusOrder(2),
+                  child: _buildSearchHistorySection(colorScheme, searchHistory),
+                )
               : const SizedBox.shrink(key: ValueKey('empty')),
         ),
 
         // Quick Search Chips
-        _buildQuickSearchSection(colorScheme),
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(3),
+          child: _buildQuickSearchSection(colorScheme),
+        ),
 
         // Suggested Movies
         if (_suggestedMovies.isNotEmpty)
-          _buildDiscoverySection(
-            colorScheme,
-            'Entdecke Filme',
-            'assets/icons/film-strip.svg',
-            _buildSuggestedMovies(),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
+            child: _buildDiscoverySection(
+              colorScheme,
+              'Entdecke Filme',
+              'assets/icons/film-strip.svg',
+              _buildSuggestedMovies(),
+            ),
           ),
 
         // Suggested Series
         if (_suggestedSeries.isNotEmpty)
-          _buildDiscoverySection(
-            colorScheme,
-            'Entdecke Serien',
-            'assets/icons/monitor-play.svg',
-            _buildSuggestedSeries(),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(5),
+            child: _buildDiscoverySection(
+              colorScheme,
+              'Entdecke Serien',
+              'assets/icons/monitor-play.svg',
+              _buildSuggestedSeries(),
+            ),
           ),
       ],
     );
@@ -589,49 +653,78 @@ class _SearchScreenState extends State<SearchScreen> {
             spacing: 8,
             runSpacing: 8,
             children: history.map((term) {
-              return GestureDetector(
-                onTap: () {
-                  _searchController.text = term;
-                  _onSearchChanged(term);
-                },
-                child: Container(
-                  padding: const EdgeInsets.only(left: 14, right: 6, top: 8, bottom: 8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        term,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: () {
-                          context.read<XtreamService>().removeFromSearchHistory(term);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          child: SvgPicture.asset(
-                            'assets/icons/x.svg',
-                            width: 12,
-                            height: 12,
-                            colorFilter: ColorFilter.mode(
-                              colorScheme.onSurface.withAlpha(100),
-                              BlendMode.srcIn,
+              return Builder(
+                builder: (chipContext) {
+                  return Focus(
+                    onFocusChange: (hasFocus) {
+                      if (hasFocus) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (chipContext.mounted) {
+                            Scrollable.ensureVisible(
+                              chipContext,
+                              alignment: 0.3,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        });
+                      }
+                    },
+                    child: Builder(
+                      builder: (ctx) {
+                        final isFocused = Focus.of(ctx).hasFocus;
+                        return GestureDetector(
+                          onTap: () {
+                            _searchController.text = term;
+                            _onSearchChanged(term);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.only(left: 14, right: 6, top: 8, bottom: 8),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(20),
+                              border: isFocused
+                                  ? Border.all(color: Colors.white, width: 2)
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  term,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () {
+                                    context.read<XtreamService>().removeFromSearchHistory(term);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    child: SvgPicture.asset(
+                                      'assets/icons/x.svg',
+                                      width: 12,
+                                      height: 12,
+                                      colorFilter: ColorFilter.mode(
+                                        colorScheme.onSurface.withAlpha(100),
+                                        BlendMode.srcIn,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                        );
+                      },
+                    ),
+                  );
+                },
               );
             }).toList(),
           ),
@@ -673,35 +766,61 @@ class _SearchScreenState extends State<SearchScreen> {
             spacing: 8,
             runSpacing: 8,
             children: _quickSearchTerms.map((term) {
-              return GestureDetector(
-                onTap: () {
-                  _searchController.text = term;
-                  _onSearchChanged(term);
+              return Builder(
+                builder: (chipContext) {
+                  return Focus(
+                    onFocusChange: (hasFocus) {
+                      if (hasFocus) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (chipContext.mounted) {
+                            Scrollable.ensureVisible(
+                              chipContext,
+                              alignment: 0.3,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        });
+                      }
+                    },
+                    child: Builder(
+                      builder: (ctx) {
+                        final isFocused = Focus.of(ctx).hasFocus;
+                        return GestureDetector(
+                          onTap: () {
+                            _searchController.text = term;
+                            _onSearchChanged(term);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  colorScheme.primary.withAlpha(20),
+                                  colorScheme.secondary.withAlpha(15),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isFocused ? Colors.white : colorScheme.primary.withAlpha(40),
+                                width: isFocused ? 2 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              term,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        colorScheme.primary.withAlpha(20),
-                        colorScheme.secondary.withAlpha(15),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: colorScheme.primary.withAlpha(40),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    term,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                ),
               );
             }).toList(),
           ),
@@ -752,10 +871,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSuggestedMovies() {
     return SizedBox(
-      height: 200,
+      height: 220,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        clipBehavior: Clip.none,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         itemCount: _suggestedMovies.length,
         itemBuilder: (context, index) {
           final movie = _suggestedMovies[index];
@@ -773,10 +893,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildSuggestedSeries() {
     return SizedBox(
-      height: 200,
+      height: 220,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        clipBehavior: Clip.none,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         itemCount: _suggestedSeries.length,
         itemBuilder: (context, index) {
           final series = _suggestedSeries[index];
@@ -955,36 +1076,116 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 
 // Search Movie Card with Favorite Button
-class _SearchMovieCard extends StatelessWidget {
+class _SearchMovieCard extends StatefulWidget {
   final XTremeCodeVodItem movie;
   final VoidCallback onTap;
 
   const _SearchMovieCard({required this.movie, required this.onTap});
 
   @override
+  State<_SearchMovieCard> createState() => _SearchMovieCardState();
+}
+
+class _SearchMovieCardState extends State<_SearchMovieCard>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-    final metadata = ContentParser.parse(movie.name ?? '');
-    final favoriteId = 'movie_${movie.streamId}';
+    final metadata = ContentParser.parse(widget.movie.name ?? '');
+    final favoriteId = 'movie_${widget.movie.streamId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 140,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colorScheme.outline.withAlpha(25)),
-        ),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 140,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
+              ),
+              boxShadow: _isFocused
+                  ? [BoxShadow(color: Colors.white.withAlpha(50), blurRadius: 16, spreadRadius: 2)]
+                  : null,
+            ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(11),
           child: Stack(
             children: [
               Positioned.fill(
-                child: movie.streamIcon != null
+                child: widget.movie.streamIcon != null
                     ? CachedNetworkImage(
-                        imageUrl: movie.streamIcon!,
+                        imageUrl: widget.movie.streamIcon!,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
                       )
@@ -1012,10 +1213,10 @@ class _SearchMovieCard extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () {
                     xtreamService.toggleFavorite(Favorite.fromMovie(
-                      streamId: movie.streamId ?? 0,
-                      title: movie.name ?? '',
-                      imageUrl: movie.streamIcon,
-                      extension: movie.containerExtension,
+                      streamId: widget.movie.streamId ?? 0,
+                      title: widget.movie.name ?? '',
+                      imageUrl: widget.movie.streamIcon,
+                      extension: widget.movie.containerExtension,
                     ));
                   },
                   child: Container(
@@ -1084,15 +1285,17 @@ class _SearchMovieCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (movie.year != null)
+                    if (widget.movie.year != null)
                       Text(
-                        movie.year!,
+                        widget.movie.year!,
                         style: GoogleFonts.poppins(fontSize: 10, color: Colors.white70),
                       ),
                   ],
                 ),
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),
@@ -1115,36 +1318,108 @@ class _SearchMovieCard extends StatelessWidget {
 }
 
 // Search Series Card with Favorite Button
-class _SearchSeriesCard extends StatelessWidget {
+class _SearchSeriesCard extends StatefulWidget {
   final XTremeCodeSeriesItem series;
   final VoidCallback onTap;
 
   const _SearchSeriesCard({required this.series, required this.onTap});
 
   @override
+  State<_SearchSeriesCard> createState() => _SearchSeriesCardState();
+}
+
+class _SearchSeriesCardState extends State<_SearchSeriesCard>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(context, alignment: 0.5,
+              duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.space ||
+            event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+      widget.onTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-    final metadata = ContentParser.parse(series.name ?? '');
-    final favoriteId = 'series_${series.seriesId}';
+    final metadata = ContentParser.parse(widget.series.name ?? '');
+    final favoriteId = 'series_${widget.series.seriesId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 140,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colorScheme.outline.withAlpha(25)),
-        ),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(scale: _scaleAnimation.value, child: child),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 140,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
+              ),
+              boxShadow: _isFocused
+                  ? [BoxShadow(color: Colors.white.withAlpha(50), blurRadius: 16, spreadRadius: 2)]
+                  : null,
+            ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(11),
           child: Stack(
             children: [
               Positioned.fill(
-                child: series.cover != null
+                child: widget.series.cover != null
                     ? CachedNetworkImage(
-                        imageUrl: series.cover!,
+                        imageUrl: widget.series.cover!,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
                       )
@@ -1172,9 +1447,9 @@ class _SearchSeriesCard extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () {
                     xtreamService.toggleFavorite(Favorite.fromSeries(
-                      seriesId: series.seriesId ?? 0,
-                      title: series.name ?? '',
-                      imageUrl: series.cover,
+                      seriesId: widget.series.seriesId ?? 0,
+                      title: widget.series.name ?? '',
+                      imageUrl: widget.series.cover,
                     ));
                   },
                   child: Container(
@@ -1243,15 +1518,17 @@ class _SearchSeriesCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (series.year != null)
+                    if (widget.series.year != null)
                       Text(
-                        series.year!,
+                        widget.series.year!,
                         style: GoogleFonts.poppins(fontSize: 10, color: Colors.white70),
                       ),
                   ],
                 ),
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),
@@ -1274,36 +1551,108 @@ class _SearchSeriesCard extends StatelessWidget {
 }
 
 // Search Live Card with Favorite Button
-class _SearchLiveCard extends StatelessWidget {
+class _SearchLiveCard extends StatefulWidget {
   final XTremeCodeLiveStreamItem stream;
   final VoidCallback onTap;
 
   const _SearchLiveCard({required this.stream, required this.onTap});
 
   @override
+  State<_SearchLiveCard> createState() => _SearchLiveCardState();
+}
+
+class _SearchLiveCardState extends State<_SearchLiveCard>
+    with SingleTickerProviderStateMixin {
+  late FocusNode _focusNode;
+  bool _isFocused = false;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    setState(() => _isFocused = hasFocus);
+    if (hasFocus) {
+      _scaleController.forward();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(context, alignment: 0.5,
+              duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+        }
+      });
+    } else {
+      _scaleController.reverse();
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.select ||
+            event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.space ||
+            event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+      widget.onTap();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final xtreamService = context.watch<XtreamService>();
-    final metadata = ContentParser.parse(stream.name ?? '');
-    final favoriteId = 'live_${stream.streamId}';
+    final metadata = ContentParser.parse(widget.stream.name ?? '');
+    final favoriteId = 'live_${widget.stream.streamId}';
     final isFavorite = xtreamService.isFavorite(favoriteId);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 180,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colorScheme.outline.withAlpha(25)),
-        ),
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _handleFocusChange,
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) => Transform.scale(scale: _scaleAnimation.value, child: child),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 180,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _isFocused ? Colors.white : colorScheme.outline.withAlpha(25),
+                width: _isFocused ? 3 : 1,
+              ),
+              boxShadow: _isFocused
+                  ? [BoxShadow(color: Colors.white.withAlpha(50), blurRadius: 16, spreadRadius: 2)]
+                  : null,
+            ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(11),
           child: Stack(
             children: [
               Positioned.fill(
-                child: stream.streamIcon != null
+                child: widget.stream.streamIcon != null
                     ? CachedNetworkImage(
-                        imageUrl: stream.streamIcon!,
+                        imageUrl: widget.stream.streamIcon!,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => _buildPlaceholder(colorScheme),
                       )
@@ -1358,9 +1707,9 @@ class _SearchLiveCard extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () {
                     xtreamService.toggleFavorite(Favorite.fromLiveStream(
-                      streamId: stream.streamId ?? 0,
-                      title: stream.name ?? '',
-                      imageUrl: stream.streamIcon,
+                      streamId: widget.stream.streamId ?? 0,
+                      title: widget.stream.name ?? '',
+                      imageUrl: widget.stream.streamIcon,
                     ));
                   },
                   child: Container(
@@ -1391,6 +1740,8 @@ class _SearchLiveCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),

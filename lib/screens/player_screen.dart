@@ -310,6 +310,13 @@ class _PlayerScreenState extends State<PlayerScreen>
       while (cleanUrl.endsWith('.') || cleanUrl.endsWith(' ')) {
         cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
       }
+
+      // Lokale Dateien brauchen file:// Präfix für media_kit
+      if (!cleanUrl.startsWith('http://') &&
+          !cleanUrl.startsWith('https://') &&
+          !cleanUrl.startsWith('file://')) {
+        cleanUrl = 'file://$cleanUrl';
+      }
       debugPrint('Clean URL: $cleanUrl');
 
       // Configure MPV buffer settings for smoother live streaming

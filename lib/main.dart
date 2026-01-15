@@ -8,7 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'theme/app_theme.dart';
 import 'shared/widgets/main_navigation.dart';
 import 'services/xtream_service.dart';
-import 'services/download_service.dart';
+import 'services/navigation_sound_service.dart';
 import 'utils/tv_utils.dart';
 
 void main() async {
@@ -19,6 +19,9 @@ void main() async {
 
   // Initialize TV detection for Android TV / Fire TV
   await TvUtils.initialize();
+
+  // Initialize navigation sounds
+  await NavigationSoundService().initialize();
 
   // Initialize window_manager for desktop platforms
   if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
@@ -46,9 +49,6 @@ class IPTVApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(
           create: (_) => XtreamService()..loadSavedCredentials(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => DownloadService()..init(),
         ),
       ],
       child: MaterialApp(
