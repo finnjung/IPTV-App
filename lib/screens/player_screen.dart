@@ -1475,8 +1475,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     }
 
-    // Escape = Vollbild verlassen (falls aktiv), sonst Zurück
-    if (key == LogicalKeyboardKey.escape) {
+    // Escape/Zurück = Vollbild verlassen (falls aktiv), sonst Zurück
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.gameButtonB) {
       if (_isFullscreen) {
         _toggleFullscreen();
       } else {
