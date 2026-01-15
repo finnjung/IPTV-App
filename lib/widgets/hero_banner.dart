@@ -327,7 +327,7 @@ class _QualityChip extends StatelessWidget {
   Color _getColor() {
     switch (quality.toUpperCase()) {
       case '8K':
-        return Colors.purpleAccent;
+        return Colors.white;
       case '4K':
       case 'UHD':
         return Colors.amber;

@@ -273,7 +273,7 @@ class _ContentCardState extends State<ContentCard>
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.deepPurple,
+                                color: Colors.grey.shade700,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(

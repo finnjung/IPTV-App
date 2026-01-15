@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Primary brand color - Violett für Premium Entertainment
-  static const Color primaryColor = Color(0xFF9333EA);
-  static const Color secondaryColor = Color(0xFFA855F7);
+  // Primary brand color - Clean monochrome
+  static const Color primaryColor = Colors.white;
+  static const Color secondaryColor = Color(0xFFAAAAAA);
+  static const Color accentColor = Color(0xFF3A3A3A); // For buttons etc.
 
   // Dark theme colors
   static const Color backgroundDark = Color(0xFF0F0F0F);
@@ -124,7 +125,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
+          backgroundColor: accentColor,
           foregroundColor: Colors.white,
           elevation: 0,
           // Larger padding for TV remote navigation

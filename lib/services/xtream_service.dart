@@ -83,6 +83,7 @@ class XtreamService extends ChangeNotifier {
 
   // Preloading State
   bool _isPreloading = false;
+  bool _isLoadingFromCache = false; // True if loading from cache (fast), false if from API (slow)
   double _preloadProgress = 0.0;
   String _preloadStatus = '';
   final ContentCacheService _cacheService = ContentCacheService();
@@ -107,6 +108,7 @@ class XtreamService extends ChangeNotifier {
 
   // Preloading Getters
   bool get isPreloading => _isPreloading;
+  bool get isLoadingFromCache => _isLoadingFromCache;
   double get preloadProgress => _preloadProgress;
   String get preloadStatus => _preloadStatus;
 
@@ -470,6 +472,7 @@ class XtreamService extends ChangeNotifier {
     await prefs.remove('xtream_port');
     await prefs.remove('xtream_username');
     await prefs.remove('xtream_password');
+    await prefs.remove('onboarding_completed');
 
     _credentials = null;
     _isConnected = false;
@@ -504,6 +507,7 @@ class XtreamService extends ChangeNotifier {
     final wasAlreadyPreloading = _isPreloading;
 
     _isPreloading = true;
+    _isLoadingFromCache = false; // Will be set to true if cache is valid
     _preloadProgress = 0.0;
     _preloadStatus = 'Prüfe Cache...';
     if (!wasAlreadyPreloading) {
@@ -513,7 +517,8 @@ class XtreamService extends ChangeNotifier {
     try {
       // Step 1: Check if cache is valid
       if (!forceRefresh && await _cacheService.isCacheValid(_credentials!)) {
-        // Load from cache
+        // Load from cache (fast path)
+        _isLoadingFromCache = true;
         _preloadStatus = 'Lade gecachte Inhalte...';
         _preloadProgress = 0.1;
         notifyListeners();
@@ -526,7 +531,8 @@ class XtreamService extends ChangeNotifier {
 
         debugPrint('Content loaded from cache');
       } else {
-        // Fetch fresh data and cache it
+        // Fetch fresh data and cache it (slow path)
+        _isLoadingFromCache = false;
         await _fetchAndCacheAllContent();
       }
     } catch (e) {

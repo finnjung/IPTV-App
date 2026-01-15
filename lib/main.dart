@@ -8,6 +8,8 @@ import 'package:window_manager/window_manager.dart';
 import 'theme/app_theme.dart';
 import 'shared/widgets/main_navigation.dart';
 import 'screens/splash_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/loading_screen.dart';
 import 'services/xtream_service.dart';
 import 'services/navigation_sound_service.dart';
 import 'utils/tv_utils.dart';
@@ -64,6 +66,14 @@ class IPTVApp extends StatelessWidget {
   }
 }
 
+/// App-Zustand nach Splash Screen
+enum _AppState {
+  splash,           // Splash Screen wird angezeigt
+  onboarding,       // Onboarding wird angezeigt
+  loading,          // LoadingScreen für langsames Laden (API)
+  ready,            // MainNavigation wird angezeigt
+}
+
 class _AppWithSplash extends StatefulWidget {
   const _AppWithSplash();
 
@@ -72,17 +82,47 @@ class _AppWithSplash extends StatefulWidget {
 }
 
 class _AppWithSplashState extends State<_AppWithSplash> {
-  bool _showSplash = true;
+  _AppState _state = _AppState.splash;
+
+  void _handleSplashComplete(SplashResult result) {
+    setState(() {
+      switch (result) {
+        case SplashResult.needsOnboarding:
+          _state = _AppState.onboarding;
+          break;
+        case SplashResult.readyWithLoading:
+          _state = _AppState.loading;
+          break;
+        case SplashResult.ready:
+          _state = _AppState.ready;
+          break;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_showSplash) {
-      return SplashScreen(
-        onComplete: () {
-          setState(() => _showSplash = false);
-        },
-      );
+    switch (_state) {
+      case _AppState.splash:
+        return SplashScreen(
+          onComplete: _handleSplashComplete,
+        );
+
+      case _AppState.onboarding:
+        return OnboardingScreen(
+          onComplete: () {
+            // Nach Onboarding zeigen wir den LoadingScreen (erstes Laden ist immer langsam)
+            setState(() => _state = _AppState.loading);
+          },
+        );
+
+      case _AppState.loading:
+        return LoadingScreen(
+          onComplete: () => setState(() => _state = _AppState.ready),
+        );
+
+      case _AppState.ready:
+        return const MainNavigation();
     }
-    return const MainNavigation();
   }
 }

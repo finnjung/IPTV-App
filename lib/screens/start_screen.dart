@@ -1695,11 +1695,11 @@ class _FavoriteCardState extends State<_FavoriteCard>
   Color _getTypeColor() {
     switch (widget.favorite.contentType) {
       case ContentType.movie:
-        return Colors.blue.shade700;
+        return Colors.grey.shade600;
       case ContentType.series:
-        return Colors.purple.shade700;
+        return Colors.grey.shade700;
       case ContentType.live:
-        return Colors.red.shade700;
+        return Colors.grey.shade800;
     }
   }
 
