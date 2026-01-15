@@ -7,7 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:xtream_code_client/xtream_code_client.dart';
+import 'package:xtream_code_client/xtream_code_client.dart' hide Image;
 import '../services/xtream_service.dart';
 import '../models/watch_progress.dart';
 import '../models/favorite.dart';
@@ -106,6 +106,22 @@ class MovieDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
                       children: [
+                        // Streameee Branding
+                        Opacity(
+                          opacity: 0.7,
+                          child: Text(
+                            'streameee',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: -0.5,
+                            ),
+                            textAlign: isDesktop ? TextAlign.center : TextAlign.left,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
                         // Tags
                         Wrap(
                           spacing: 8,
@@ -566,6 +582,21 @@ class _SimplifiedMovieDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: isDesktop ? CrossAxisAlignment.center : CrossAxisAlignment.start,
                       children: [
+                        // Streameee Branding
+                        Opacity(
+                          opacity: 0.7,
+                          child: Text(
+                            'streameee',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: -0.5,
+                            ),
+                            textAlign: isDesktop ? TextAlign.center : TextAlign.left,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         if (metadata.quality != null)
                           _buildTag(metadata.quality!, isPrimary: true),
                         const SizedBox(height: 12),

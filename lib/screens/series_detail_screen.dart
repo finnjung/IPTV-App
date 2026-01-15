@@ -5,7 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:xtream_code_client/xtream_code_client.dart';
+import 'package:xtream_code_client/xtream_code_client.dart' hide Image;
 import '../services/xtream_service.dart';
 import '../models/watch_progress.dart';
 import '../models/favorite.dart';
@@ -520,6 +520,20 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              // Streameee Branding
+                              Opacity(
+                                opacity: 0.7,
+                                child: Text(
+                                  'streameee',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
                               // Titel
                               Text(
                                 ContentParser.parse(widget.series.name ?? 'Unbekannt').cleanName,
@@ -582,6 +596,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                             ],
                           ),
                         ),
+
                       ],
                     ),
                   ),
@@ -1433,6 +1448,20 @@ class _SeriesDetailScreenFromFavoriteState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              // Streameee Branding
+                              Opacity(
+                                opacity: 0.7,
+                                child: Text(
+                                  'streameee',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onSurface,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
                               // Titel
                               Text(
                                 ContentParser.parse(widget.seriesName).cleanName,
@@ -1495,6 +1524,7 @@ class _SeriesDetailScreenFromFavoriteState
                             ],
                           ),
                         ),
+
                       ],
                     ),
                   ),

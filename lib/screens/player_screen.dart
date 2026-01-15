@@ -1615,25 +1615,41 @@ class _PlayerScreenState extends State<PlayerScreen>
                         ),
                       ),
                     ),
-                    // Titel - mittig positioniert mit cineastischer Schrift
+                    // Streameee Branding + Titel (linksbündig, vertikal mittig)
                     Positioned.fill(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Opacity(
-                            opacity: _pauseTitleController.value * 0.55,
-                            child: Text(
-                              _currentTitle.toUpperCase(),
-                              style: GoogleFonts.anton(
-                                color: Colors.white,
-                                fontSize: 140,
-                                letterSpacing: 1,
-                                height: 0.9,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Opacity(
+                          opacity: _pauseTitleController.value * 0.7,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Streameee Branding
+                              Text(
+                                'streameee',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: -1.5,
+                                ),
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              const SizedBox(height: 4),
+                              // Titel
+                              Text(
+                                _currentTitle,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 56,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.0,
+                                ),
+                                textAlign: TextAlign.left,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
                       ),
