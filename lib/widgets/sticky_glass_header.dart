@@ -16,13 +16,13 @@ bool _useDesktopLayout(BuildContext context) {
 
 class StickyGlassHeader extends StatelessWidget {
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final String iconPath;
 
   const StickyGlassHeader({
     super.key,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.iconPath,
   });
 
@@ -41,12 +41,12 @@ class StickyGlassHeader extends StatelessWidget {
 
 class _StickyGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final String iconPath;
 
   _StickyGlassHeaderDelegate({
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.iconPath,
   });
 
@@ -115,41 +115,46 @@ class _StickyGlassHeaderDelegate extends SliverPersistentHeaderDelegate {
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      subtitle,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: colorScheme.onSurface.withAlpha(150),
-                      ),
-                    ),
-                  ),
-                  // Such-Icon nur auf Mobile (Desktop hat's im Overlay)
-                  if (!_useDesktopLayout(context))
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SearchScreen(),
+              if (subtitle != null || !_useDesktopLayout(context)) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (subtitle != null)
+                      Expanded(
+                        child: Text(
+                          subtitle!,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: colorScheme.onSurface.withAlpha(150),
                           ),
-                        );
-                      },
-                      child: SvgPicture.asset(
-                        'assets/icons/magnifying-glass.svg',
-                        width: 26,
-                        height: 26,
-                        colorFilter: ColorFilter.mode(
-                          colorScheme.onSurface.withAlpha(180),
-                          BlendMode.srcIn,
+                        ),
+                      )
+                    else
+                      const Spacer(),
+                    // Such-Icon nur auf Mobile (Desktop hat's im Overlay)
+                    if (!_useDesktopLayout(context))
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SearchScreen(),
+                            ),
+                          );
+                        },
+                        child: SvgPicture.asset(
+                          'assets/icons/magnifying-glass.svg',
+                          width: 26,
+                          height: 26,
+                          colorFilter: ColorFilter.mode(
+                            colorScheme.onSurface.withAlpha(180),
+                            BlendMode.srcIn,
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

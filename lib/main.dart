@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'theme/app_theme.dart';
 import 'shared/widgets/main_navigation.dart';
+import 'screens/splash_screen.dart';
 import 'services/xtream_service.dart';
 import 'services/navigation_sound_service.dart';
 import 'utils/tv_utils.dart';
@@ -57,8 +58,31 @@ class IPTVApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.dark,
-        home: const MainNavigation(),
+        home: const _AppWithSplash(),
       ),
     );
+  }
+}
+
+class _AppWithSplash extends StatefulWidget {
+  const _AppWithSplash();
+
+  @override
+  State<_AppWithSplash> createState() => _AppWithSplashState();
+}
+
+class _AppWithSplashState extends State<_AppWithSplash> {
+  bool _showSplash = true;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showSplash) {
+      return SplashScreen(
+        onComplete: () {
+          setState(() => _showSplash = false);
+        },
+      );
+    }
+    return const MainNavigation();
   }
 }

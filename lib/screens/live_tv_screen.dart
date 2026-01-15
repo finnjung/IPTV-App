@@ -79,9 +79,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 // Sticky Glass Header
                 StickyGlassHeader(
                   title: 'Live TV',
-                  subtitle: isLoading
-                      ? 'Laden...'
-                      : '${content?.allStreamsSorted.length ?? 0} Sender verfugbar',
+                  subtitle: null,
                   iconPath: 'assets/icons/broadcast.svg',
                 ),
 

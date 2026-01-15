@@ -65,9 +65,7 @@ class _SeriesScreenState extends State<SeriesScreen> {
                   // Sticky Glass Header
                   StickyGlassHeader(
                     title: 'Serien',
-                    subtitle: isLoading
-                        ? 'Laden...'
-                        : '${content?.allSeriesSorted.length ?? 0} Serien verfugbar',
+                    subtitle: null,
                     iconPath: 'assets/icons/monitor-play.svg',
                   ),
 

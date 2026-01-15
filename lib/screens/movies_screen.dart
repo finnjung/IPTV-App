@@ -65,9 +65,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
                 // Sticky Glass Header
                 StickyGlassHeader(
                   title: 'Filme',
-                  subtitle: isLoading
-                      ? 'Laden...'
-                      : '${content?.allMoviesSorted.length ?? 0} Filme verfugbar',
+                  subtitle: null,
                   iconPath: 'assets/icons/film-strip.svg',
                 ),
 
