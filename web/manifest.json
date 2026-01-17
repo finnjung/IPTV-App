@@ -1,6 +1,6 @@
 {
-    "name": "iptv_app",
-    "short_name": "iptv_app",
+    "name": "streameee",
+    "short_name": "streameee",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

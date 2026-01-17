@@ -10,10 +10,10 @@
         android:required="false" />
 
     <application
-        android:label="iptv_app"
+        android:label="streameee"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:banner="@mipmap/ic_launcher">
+        android:banner="@drawable/ic_banner">
         <activity
             android:name=".MainActivity"
             android:exported="true"
