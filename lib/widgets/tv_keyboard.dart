@@ -10,7 +10,6 @@ class TvKeyboard extends StatefulWidget {
   final String? hintText;
   final bool autofocus;
   final bool showInputField;
-  final bool showCloseButton;
 
   const TvKeyboard({
     super.key,
@@ -20,7 +19,6 @@ class TvKeyboard extends StatefulWidget {
     this.hintText,
     this.autofocus = true,
     this.showInputField = true,
-    this.showCloseButton = true,
   });
 
   @override
@@ -28,25 +26,21 @@ class TvKeyboard extends StatefulWidget {
 }
 
 class _TvKeyboardState extends State<TvKeyboard> {
-  static const List<String> _qwertyRows = [
-    '1234567890',
-    'qwertzuiop',
-    'asdfghjkl',
-    'yxcvbnm.-/',
-    '@:_#',
+  // Keyboard layout - SPACE and DEL integrated in last row
+  static const List<List<String>> _keyboardLayout = [
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+    ['q', 'w', 'e', 'r', 't', 'z', 'u', 'i', 'o', 'p'],
+    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '@'],
+    ['y', 'x', 'c', 'v', 'b', 'n', 'm', '.', '-', '/'],
+    ['SPACE', ':', '_', '#', 'DEL'],
   ];
 
   // URL snippets for quick insertion
   static const List<String> _snippetKeys = ['http://', 'https://', '.com', '.de'];
 
-  // Special keys with icons
-  static const List<String> _specialKeys = ['SPACE', 'DEL'];
-
   int _focusedRow = 0;
   int _focusedCol = 0;
-  bool _isOnSpecialRow = false;
-  bool _isOnSnippetCol = false; // Snippets are now on the side
-  bool _isOnCloseButton = false;
+  bool _isOnSnippetCol = false;
   final FocusNode _keyboardFocusNode = FocusNode();
 
   @override
@@ -66,14 +60,10 @@ class _TvKeyboardState extends State<TvKeyboard> {
   }
 
   String get _currentKey {
-    if (_isOnCloseButton) return 'CLOSE';
-    if (_isOnSpecialRow) {
-      return _specialKeys[_focusedCol.clamp(0, _specialKeys.length - 1)];
-    }
     if (_isOnSnippetCol) {
       return _snippetKeys[_focusedRow.clamp(0, _snippetKeys.length - 1)];
     }
-    final row = _qwertyRows[_focusedRow];
+    final row = _keyboardLayout[_focusedRow];
     return row[_focusedCol.clamp(0, row.length - 1)];
   }
 
@@ -88,12 +78,6 @@ class _TvKeyboardState extends State<TvKeyboard> {
               .substring(0, widget.controller.text.length - 1);
         }
         break;
-      case 'CLEAR':
-        widget.controller.clear();
-        break;
-      case 'CLOSE':
-        widget.onClose?.call();
-        break;
       default:
         widget.controller.text += key;
     }
@@ -106,22 +90,13 @@ class _TvKeyboardState extends State<TvKeyboard> {
 
     if (key == LogicalKeyboardKey.arrowUp) {
       setState(() {
-        if (_isOnCloseButton) {
-          // Do nothing, already at top
-        } else if (_isOnSpecialRow) {
-          _isOnSpecialRow = false;
-          _focusedRow = _qwertyRows.length - 1;
-          _focusedCol = _focusedCol.clamp(0, _qwertyRows[_focusedRow].length - 1);
-        } else if (_isOnSnippetCol) {
+        if (_isOnSnippetCol) {
           if (_focusedRow > 0) {
             _focusedRow--;
           }
         } else if (_focusedRow > 0) {
           _focusedRow--;
-          _focusedCol = _focusedCol.clamp(0, _qwertyRows[_focusedRow].length - 1);
-        } else if (widget.showCloseButton) {
-          // Top row -> Close button
-          _isOnCloseButton = true;
+          _focusedCol = _focusedCol.clamp(0, _keyboardLayout[_focusedRow].length - 1);
         }
       });
       return KeyEventResult.handled;
@@ -129,23 +104,13 @@ class _TvKeyboardState extends State<TvKeyboard> {
 
     if (key == LogicalKeyboardKey.arrowDown) {
       setState(() {
-        if (_isOnCloseButton) {
-          _isOnCloseButton = false;
-          _focusedRow = 0;
-          _focusedCol = _focusedCol.clamp(0, _qwertyRows[_focusedRow].length - 1);
-        } else if (_isOnSpecialRow) {
-          // Already at bottom
-        } else if (_isOnSnippetCol) {
+        if (_isOnSnippetCol) {
           if (_focusedRow < _snippetKeys.length - 1) {
             _focusedRow++;
           }
-        } else if (_focusedRow < _qwertyRows.length - 1) {
+        } else if (_focusedRow < _keyboardLayout.length - 1) {
           _focusedRow++;
-          _focusedCol = _focusedCol.clamp(0, _qwertyRows[_focusedRow].length - 1);
-        } else {
-          // Last qwerty row -> Special row
-          _isOnSpecialRow = true;
-          _focusedCol = _focusedCol.clamp(0, _specialKeys.length - 1);
+          _focusedCol = _focusedCol.clamp(0, _keyboardLayout[_focusedRow].length - 1);
         }
       });
       return KeyEventResult.handled;
@@ -153,13 +118,11 @@ class _TvKeyboardState extends State<TvKeyboard> {
 
     if (key == LogicalKeyboardKey.arrowLeft) {
       setState(() {
-        if (_isOnCloseButton) {
-          // Do nothing
-        } else if (_isOnSnippetCol) {
+        if (_isOnSnippetCol) {
           // Snippet -> keyboard
           _isOnSnippetCol = false;
-          _focusedRow = _focusedRow.clamp(0, _qwertyRows.length - 1);
-          _focusedCol = _qwertyRows[_focusedRow].length - 1;
+          _focusedRow = _focusedRow.clamp(0, _keyboardLayout.length - 1);
+          _focusedCol = _keyboardLayout[_focusedRow].length - 1;
         } else if (_focusedCol > 0) {
           _focusedCol--;
         }
@@ -169,20 +132,13 @@ class _TvKeyboardState extends State<TvKeyboard> {
 
     if (key == LogicalKeyboardKey.arrowRight) {
       setState(() {
-        if (_isOnCloseButton) {
-          // Do nothing
-        } else if (_isOnSnippetCol) {
-          // Do nothing, already at right edge of snippets
+        if (_isOnSnippetCol) {
+          // Do nothing, already at right edge
         } else {
-          int maxCol;
-          if (_isOnSpecialRow) {
-            maxCol = _specialKeys.length - 1;
-          } else {
-            maxCol = _qwertyRows[_focusedRow].length - 1;
-          }
+          final maxCol = _keyboardLayout[_focusedRow].length - 1;
           if (_focusedCol < maxCol) {
             _focusedCol++;
-          } else if (!_isOnSpecialRow) {
+          } else {
             // Right edge of keyboard -> Snippets
             _isOnSnippetCol = true;
             _focusedRow = _focusedRow.clamp(0, _snippetKeys.length - 1);
@@ -242,142 +198,75 @@ class _TvKeyboardState extends State<TvKeyboard> {
             color: colorScheme.outline.withAlpha(50),
           ),
         ),
-        child: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Close button row
-            if (widget.showCloseButton)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _CloseButton(
-                  isFocused: _isOnCloseButton,
-                  onTap: () => widget.onClose?.call(),
-                ),
-              ),
-
-            const SizedBox(height: 8),
-
-            // Main content: Keyboard + Snippets side by side
-            Row(
+            // Keyboard section
+            Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Keyboard section
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Keyboard rows
-                    ..._qwertyRows.asMap().entries.map((entry) {
-                      final rowIndex = entry.key;
-                      final row = entry.value;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: row.split('').asMap().entries.map((charEntry) {
-                            final colIndex = charEntry.key;
-                            final char = charEntry.value;
-                            final isFocused = !_isOnSpecialRow &&
-                                !_isOnSnippetCol &&
-                                !_isOnCloseButton &&
-                                _focusedRow == rowIndex &&
-                                _focusedCol == colIndex;
-                            return _KeyButton(
-                              label: char.toUpperCase(),
-                              isFocused: isFocused,
-                              onTap: () => _handleKeyPress(char),
-                            );
-                          }).toList(),
-                        ),
-                      );
-                    }),
+              children: _keyboardLayout.asMap().entries.map((entry) {
+                final rowIndex = entry.key;
+                final row = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: row.asMap().entries.map((charEntry) {
+                      final colIndex = charEntry.key;
+                      final char = charEntry.value;
+                      final isFocused = !_isOnSnippetCol &&
+                          _focusedRow == rowIndex &&
+                          _focusedCol == colIndex;
 
-                    const SizedBox(height: 6),
-
-                    // Special keys row (with icons)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: _specialKeys.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final key = entry.value;
-                        final isFocused = _isOnSpecialRow &&
-                            !_isOnSnippetCol &&
-                            !_isOnCloseButton &&
-                            _focusedCol == index;
+                      // Special keys (SPACE, DEL) get icons
+                      if (char == 'SPACE' || char == 'DEL') {
                         return _SpecialKeyButton(
-                          keyType: key,
+                          keyType: char,
                           isFocused: isFocused,
-                          onTap: () => _handleKeyPress(key),
+                          onTap: () => _handleKeyPress(char),
                         );
-                      }).toList(),
-                    ),
-                  ],
-                ),
+                      }
 
-                // Vertical divider
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Container(
-                    width: 1,
-                    height: 180,
-                    color: Colors.white.withAlpha(30),
-                  ),
-                ),
-
-                // Snippets column (on the side)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _snippetKeys.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final snippet = entry.value;
-                    final isFocused = _isOnSnippetCol &&
-                        !_isOnCloseButton &&
-                        _focusedRow == index;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: _SnippetButton(
-                        label: snippet,
+                      return _KeyButton(
+                        label: char.toUpperCase(),
                         isFocused: isFocused,
-                        onTap: () => _handleKeyPress(snippet),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
+                        onTap: () => _handleKeyPress(char),
+                      );
+                    }).toList(),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            // Vertical divider
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Container(
+                width: 1,
+                height: 180,
+                color: Colors.white.withAlpha(30),
+              ),
+            ),
+
+            // Snippets column (on the side)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: _snippetKeys.asMap().entries.map((entry) {
+                final index = entry.key;
+                final snippet = entry.value;
+                final isFocused = _isOnSnippetCol && _focusedRow == index;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: _SnippetButton(
+                    label: snippet,
+                    isFocused: isFocused,
+                    onTap: () => _handleKeyPress(snippet),
+                  ),
+                );
+              }).toList(),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CloseButton extends StatelessWidget {
-  final bool isFocused;
-  final VoidCallback onTap;
-
-  const _CloseButton({
-    required this.isFocused,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: isFocused ? Colors.white : Colors.white.withAlpha(20),
-          borderRadius: BorderRadius.circular(8),
-          border: isFocused ? Border.all(color: Colors.white, width: 2) : null,
-        ),
-        child: Icon(
-          Icons.close,
-          size: 20,
-          color: isFocused ? Colors.black : Colors.white.withAlpha(180),
         ),
       ),
     );
@@ -450,8 +339,6 @@ class _SpecialKeyButton extends StatelessWidget {
         return Icons.space_bar;
       case 'DEL':
         return Icons.backspace_outlined;
-      case 'CLEAR':
-        return Icons.clear_all;
       default:
         return Icons.help_outline;
     }
@@ -463,7 +350,7 @@ class _SpecialKeyButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        width: keyType == 'SPACE' ? 120 : 60,
+        width: keyType == 'SPACE' ? 80 : 52,
         height: 36,
         margin: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(

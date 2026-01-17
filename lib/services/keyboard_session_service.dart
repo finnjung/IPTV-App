@@ -10,6 +10,7 @@ class RemoteCredentials {
   final String? password;
   final bool submitted; // True when user explicitly clicked "Send to TV"
   final String? focusedField; // Currently focused field on phone
+  final String? source; // 'tv' or 'phone' - where the last update came from
 
   RemoteCredentials({
     this.serverUrl,
@@ -18,6 +19,7 @@ class RemoteCredentials {
     this.password,
     this.submitted = false,
     this.focusedField,
+    this.source,
   });
 
   factory RemoteCredentials.fromMap(Map<dynamic, dynamic> map) {
@@ -28,6 +30,7 @@ class RemoteCredentials {
       password: map['password'] as String?,
       submitted: map['submitted'] == true,
       focusedField: map['focusedField'] as String?,
+      source: map['source'] as String?,
     );
   }
 
@@ -120,6 +123,28 @@ class KeyboardSessionService {
     await _database
         .child('$_sessionsPath/$_currentSessionId/status')
         .set('completed');
+  }
+
+  /// Update credentials from TV (for bidirectional sync)
+  Future<void> updateFromTv({
+    String? serverUrl,
+    String? port,
+    String? username,
+    String? password,
+  }) async {
+    if (_currentSessionId == null) return;
+
+    final updates = <String, dynamic>{
+      'updatedAt': ServerValue.timestamp,
+      'source': 'tv', // Mark that this update came from TV
+    };
+
+    if (serverUrl != null) updates['serverUrl'] = serverUrl;
+    if (port != null) updates['port'] = port;
+    if (username != null) updates['username'] = username;
+    if (password != null) updates['password'] = password;
+
+    await _database.child('$_sessionsPath/$_currentSessionId').update(updates);
   }
 
   /// End the current session and clean up

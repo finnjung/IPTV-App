@@ -59,6 +59,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       'back': 'Back',
       'next': 'Next',
       'skip': 'Skip',
+      'close': 'Close',
       'lets_go': 'Let\'s Go',
       'retry': 'Retry',
       'all_set': 'You\'re All Set!',
@@ -93,6 +94,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       'back': 'Zurück',
       'next': 'Weiter',
       'skip': 'Überspringen',
+      'close': 'Schließen',
       'lets_go': 'Los geht\'s',
       'retry': 'Erneut versuchen',
       'all_set': 'Alles bereit!',
@@ -145,6 +147,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   String _prevUsername = '';
   String _prevPassword = '';
 
+  // Debounce timer for syncing TV input to Firebase
+  Timer? _tvSyncDebounce;
+
   // Language options with priority order
   static const List<(String?, String)> _languages = [
     (null, 'English'),
@@ -184,13 +189,36 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _startButtonFocus.dispose();
     _fadeController.dispose();
     _credentialsSubscription?.cancel();
+    _tvSyncDebounce?.cancel();
     _keyboardSessionService.endSession();
     super.dispose();
+  }
+
+  /// Sync TV keyboard input to Firebase (for bidirectional sync)
+  void _syncTvInputToFirebase() {
+    if (!_isQrSessionActive) return;
+
+    _tvSyncDebounce?.cancel();
+    _tvSyncDebounce = Timer(const Duration(milliseconds: 300), () {
+      _keyboardSessionService.updateFromTv(
+        serverUrl: _serverController.text,
+        port: _portController.text.isEmpty ? '80' : _portController.text,
+        username: _usernameController.text,
+        password: _passwordController.text,
+      );
+    });
   }
 
   /// Start QR code session for remote keyboard input
   Future<void> _startQrSession() async {
     await _keyboardSessionService.startSession();
+
+    // Add listeners to sync TV keyboard input to phone
+    _serverController.addListener(_syncTvInputToFirebase);
+    _portController.addListener(_syncTvInputToFirebase);
+    _usernameController.addListener(_syncTvInputToFirebase);
+    _passwordController.addListener(_syncTvInputToFirebase);
+
     setState(() {
       _isQrSessionActive = true;
       _inputMethod = _TvInputMethod.qrCode;
@@ -204,11 +232,22 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           final newUsername = credentials.username ?? '';
           final newPassword = credentials.password ?? '';
 
-          // Update text controllers
-          if (newServerUrl.isNotEmpty) _serverController.text = newServerUrl;
-          if (newPort.isNotEmpty) _portController.text = newPort;
-          if (newUsername.isNotEmpty) _usernameController.text = newUsername;
-          if (newPassword.isNotEmpty) _passwordController.text = newPassword;
+          // Only update text controllers if the change came from phone (not TV)
+          // This prevents overwriting what the user is typing on TV
+          if (credentials.source != 'tv') {
+            if (newServerUrl.isNotEmpty && _serverController.text != newServerUrl) {
+              _serverController.text = newServerUrl;
+            }
+            if (newPort.isNotEmpty && _portController.text != newPort) {
+              _portController.text = newPort;
+            }
+            if (newUsername.isNotEmpty && _usernameController.text != newUsername) {
+              _usernameController.text = newUsername;
+            }
+            if (newPassword.isNotEmpty && _passwordController.text != newPassword) {
+              _passwordController.text = newPassword;
+            }
+          }
 
           // Detect which field is focused or being edited and jump to that step
           // Steps: 2=serverUrl, 3=port, 4=username, 5=password
@@ -281,6 +320,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   /// Stop QR code session
   Future<void> _stopQrSession() async {
+    // Remove TV sync listeners
+    _serverController.removeListener(_syncTvInputToFirebase);
+    _portController.removeListener(_syncTvInputToFirebase);
+    _usernameController.removeListener(_syncTvInputToFirebase);
+    _passwordController.removeListener(_syncTvInputToFirebase);
+    _tvSyncDebounce?.cancel();
+
     _credentialsSubscription?.cancel();
     _credentialsSubscription = null;
     await _keyboardSessionService.endSession();
@@ -1054,7 +1100,6 @@ class _OnboardingInputStepState extends State<_OnboardingInputStep> {
           hintText: widget.hintText,
           autofocus: true,
           showInputField: false,
-          showCloseButton: true,
           onClose: () {
             _setSelectedMethod(_TvInputMethod.none);
             _setShowKeyboard(false);
@@ -1066,10 +1111,20 @@ class _OnboardingInputStepState extends State<_OnboardingInputStep> {
 
         // Navigation buttons column
         Padding(
-          padding: const EdgeInsets.only(top: 48),
+          padding: const EdgeInsets.only(top: 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Close keyboard button
+              _OnboardingButton(
+                label: widget.strings['close'] ?? 'Close',
+                onPressed: () {
+                  _setSelectedMethod(_TvInputMethod.none);
+                  _setShowKeyboard(false);
+                },
+                isSecondary: true,
+              ),
+              const SizedBox(height: 12),
               _OnboardingButton(
                 label: widget.strings['back']!,
                 onPressed: widget.onBack,

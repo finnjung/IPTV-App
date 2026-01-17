@@ -441,6 +441,28 @@
           if (data.status === 'completed') {
             showSuccess();
           }
+
+          // Bidirectional sync: update input fields if change came from TV
+          if (data.source === 'tv') {
+            const serverUrlInput = document.getElementById('serverUrl');
+            const portInput = document.getElementById('port');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+
+            // Only update if value is different (avoid cursor jump)
+            if (data.serverUrl && serverUrlInput.value !== data.serverUrl) {
+              serverUrlInput.value = data.serverUrl;
+            }
+            if (data.port && portInput.value !== data.port) {
+              portInput.value = data.port;
+            }
+            if (data.username && usernameInput.value !== data.username) {
+              usernameInput.value = data.username;
+            }
+            if (data.password && passwordInput.value !== data.password) {
+              passwordInput.value = data.password;
+            }
+          }
         }
       });
     }
@@ -510,6 +532,7 @@
             }
           });
           updates.updatedAt = Date.now();
+          updates.source = 'phone'; // Mark that this update came from phone
 
           try {
             await update(sessionRef, updates);
