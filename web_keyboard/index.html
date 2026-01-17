@@ -472,7 +472,20 @@
     const inputs = ['serverUrl', 'port', 'username', 'password'];
 
     inputs.forEach(inputId => {
-      document.getElementById(inputId).addEventListener('input', () => {
+      const inputEl = document.getElementById(inputId);
+
+      // Track focus to notify TV which field is active
+      inputEl.addEventListener('focus', async () => {
+        try {
+          const sessionRef = ref(database, `keyboard_sessions/${sessionId}`);
+          await update(sessionRef, { focusedField: inputId });
+        } catch (error) {
+          console.error('Focus update error:', error);
+        }
+      });
+
+      // Auto-save on input change
+      inputEl.addEventListener('input', () => {
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(async () => {
           const sessionRef = ref(database, `keyboard_sessions/${sessionId}`);

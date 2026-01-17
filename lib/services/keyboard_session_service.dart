@@ -9,6 +9,7 @@ class RemoteCredentials {
   final String? username;
   final String? password;
   final bool submitted; // True when user explicitly clicked "Send to TV"
+  final String? focusedField; // Currently focused field on phone
 
   RemoteCredentials({
     this.serverUrl,
@@ -16,6 +17,7 @@ class RemoteCredentials {
     this.username,
     this.password,
     this.submitted = false,
+    this.focusedField,
   });
 
   factory RemoteCredentials.fromMap(Map<dynamic, dynamic> map) {
@@ -25,6 +27,7 @@ class RemoteCredentials {
       username: map['username'] as String?,
       password: map['password'] as String?,
       submitted: map['submitted'] == true,
+      focusedField: map['focusedField'] as String?,
     );
   }
 

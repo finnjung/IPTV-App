@@ -210,18 +210,40 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           if (newUsername.isNotEmpty) _usernameController.text = newUsername;
           if (newPassword.isNotEmpty) _passwordController.text = newPassword;
 
-          // Detect which field is being edited and jump to that step
+          // Detect which field is focused or being edited and jump to that step
           // Steps: 2=serverUrl, 3=port, 4=username, 5=password
           int? targetStep;
 
-          if (newPassword != _prevPassword && newPassword.isNotEmpty) {
-            targetStep = 5; // Password step
-          } else if (newUsername != _prevUsername && newUsername.isNotEmpty) {
-            targetStep = 4; // Username step
-          } else if (newPort != _prevPort && newPort != '80') {
-            targetStep = 3; // Port step
-          } else if (newServerUrl != _prevServerUrl && newServerUrl.isNotEmpty) {
-            targetStep = 2; // Server URL step
+          // First priority: focused field (user tapped on a field)
+          final focusedField = credentials.focusedField;
+          if (focusedField != null) {
+            switch (focusedField) {
+              case 'serverUrl':
+                targetStep = 2;
+                break;
+              case 'port':
+                targetStep = 3;
+                break;
+              case 'username':
+                targetStep = 4;
+                break;
+              case 'password':
+                targetStep = 5;
+                break;
+            }
+          }
+
+          // Second priority: detect field changes (fallback)
+          if (targetStep == null) {
+            if (newPassword != _prevPassword && newPassword.isNotEmpty) {
+              targetStep = 5; // Password step
+            } else if (newUsername != _prevUsername && newUsername.isNotEmpty) {
+              targetStep = 4; // Username step
+            } else if (newPort != _prevPort && newPort != '80') {
+              targetStep = 3; // Port step
+            } else if (newServerUrl != _prevServerUrl && newServerUrl.isNotEmpty) {
+              targetStep = 2; // Server URL step
+            }
           }
 
           // Navigate to the field being edited (only if we're on a credential step)
