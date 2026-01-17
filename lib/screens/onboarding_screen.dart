@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../services/xtream_service.dart';
+import '../services/keyboard_session_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/tv_keyboard.dart';
 import '../utils/tv_utils.dart';
@@ -14,8 +17,9 @@ import '../utils/tv_utils.dart';
 /// Guides new users through initial setup: credentials + language preference
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
+  final bool forceTvMode; // For testing QR input on non-TV devices
 
-  const OnboardingScreen({super.key, required this.onComplete});
+  const OnboardingScreen({super.key, required this.onComplete, this.forceTvMode = false});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -34,6 +38,86 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final _passwordController = TextEditingController();
   String? _selectedLanguage;
 
+  // Localization - null means not selected yet (show English)
+  String? _uiLanguage;
+
+  // Localized strings
+  static const Map<String, Map<String, String>> _strings = {
+    'en': {
+      'welcome': 'Welcome to streameee',
+      'start_setup': 'Start Setup',
+      'choose_language': 'Choose Your Language',
+      'language_hint': 'Content in your preferred language will be prioritized',
+      'server_url': 'Server URL',
+      'server_url_desc': 'Enter your IPTV server URL',
+      'port': 'Port (Optional)',
+      'port_desc': 'Default is 80. Only change if needed.',
+      'username': 'Username',
+      'username_desc': 'Your IPTV username',
+      'password': 'Password',
+      'password_desc': 'Your IPTV password',
+      'back': 'Back',
+      'next': 'Next',
+      'skip': 'Skip',
+      'lets_go': 'Let\'s Go',
+      'retry': 'Retry',
+      'all_set': 'You\'re All Set!',
+      'connecting': 'Connecting to server...',
+      'connection_failed': 'Connection failed. Please check your details.',
+      'how_to_enter': 'How do you want to enter?',
+      'remote': 'Remote',
+      'remote_desc': 'TV keyboard',
+      'smartphone': 'Smartphone',
+      'smartphone_desc': 'Scan QR code',
+      'show_keyboard': 'Show Keyboard',
+      'hide_keyboard': 'Hide Keyboard',
+      'other_method': 'Other Method',
+      'scan_qr': 'Scan the QR code with your phone\nto enter all credentials',
+      'waiting_input': 'Waiting for input...',
+      'recommended': 'Recommended',
+      'no_preference': 'No Preference',
+    },
+    'de': {
+      'welcome': 'Willkommen bei streameee',
+      'start_setup': 'Einrichtung starten',
+      'choose_language': 'Wähle deine Sprache',
+      'language_hint': 'Inhalte in deiner bevorzugten Sprache werden priorisiert',
+      'server_url': 'Server URL',
+      'server_url_desc': 'Gib die URL deines IPTV-Servers ein',
+      'port': 'Port (Optional)',
+      'port_desc': 'Standard ist 80. Nur ändern wenn nötig.',
+      'username': 'Benutzername',
+      'username_desc': 'Dein IPTV Benutzername',
+      'password': 'Passwort',
+      'password_desc': 'Dein IPTV Passwort',
+      'back': 'Zurück',
+      'next': 'Weiter',
+      'skip': 'Überspringen',
+      'lets_go': 'Los geht\'s',
+      'retry': 'Erneut versuchen',
+      'all_set': 'Alles bereit!',
+      'connecting': 'Verbinde mit Server...',
+      'connection_failed': 'Verbindung fehlgeschlagen. Bitte prüfe deine Eingaben.',
+      'how_to_enter': 'Wie möchtest du eingeben?',
+      'remote': 'Fernbedienung',
+      'remote_desc': 'Tastatur auf dem TV',
+      'smartphone': 'Smartphone',
+      'smartphone_desc': 'QR-Code scannen',
+      'show_keyboard': 'Tastatur einblenden',
+      'hide_keyboard': 'Tastatur ausblenden',
+      'other_method': 'Andere Methode',
+      'scan_qr': 'Scanne den QR-Code mit deinem Handy\num alle Zugangsdaten einzugeben',
+      'waiting_input': 'Warte auf Eingabe...',
+      'recommended': 'Empfohlen',
+      'no_preference': 'Keine Präferenz',
+    },
+  };
+
+  String _t(String key) {
+    final lang = _uiLanguage ?? 'en';
+    return _strings[lang]?[key] ?? _strings['en']![key]!;
+  }
+
   // Connection State
   bool _isConnecting = false;
   String? _connectionError;
@@ -46,11 +130,25 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
+  // QR Code / Remote Keyboard
+  final KeyboardSessionService _keyboardSessionService = KeyboardSessionService();
+  StreamSubscription<RemoteCredentials>? _credentialsSubscription;
+  bool _isQrSessionActive = false;
+
+  // Input method state (persisted across steps)
+  _TvInputMethod _inputMethod = _TvInputMethod.none;
+  bool _showKeyboard = false;
+
+  // Track previous credentials for detecting field changes
+  String _prevServerUrl = '';
+  String _prevPort = '80';
+  String _prevUsername = '';
+  String _prevPassword = '';
+
   // Language options with priority order
   static const List<(String?, String)> _languages = [
-    (null, 'Keine Präferenz'),
+    (null, 'English'),
     ('DE', 'Deutsch'),
-    ('EN', 'English'),
     ('TR', 'Türkçe'),
     ('FR', 'Français'),
     ('ES', 'Español'),
@@ -85,16 +183,102 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _nextButtonFocus.dispose();
     _startButtonFocus.dispose();
     _fadeController.dispose();
+    _credentialsSubscription?.cancel();
+    _keyboardSessionService.endSession();
     super.dispose();
+  }
+
+  /// Start QR code session for remote keyboard input
+  Future<void> _startQrSession() async {
+    await _keyboardSessionService.startSession();
+    setState(() {
+      _isQrSessionActive = true;
+      _inputMethod = _TvInputMethod.qrCode;
+    });
+
+    _credentialsSubscription = _keyboardSessionService.listenToSession().listen(
+      (credentials) {
+        setState(() {
+          final newServerUrl = credentials.serverUrl ?? '';
+          final newPort = credentials.port ?? '80';
+          final newUsername = credentials.username ?? '';
+          final newPassword = credentials.password ?? '';
+
+          // Update text controllers
+          if (newServerUrl.isNotEmpty) _serverController.text = newServerUrl;
+          if (newPort.isNotEmpty) _portController.text = newPort;
+          if (newUsername.isNotEmpty) _usernameController.text = newUsername;
+          if (newPassword.isNotEmpty) _passwordController.text = newPassword;
+
+          // Detect which field is being edited and jump to that step
+          // Steps: 2=serverUrl, 3=port, 4=username, 5=password
+          int? targetStep;
+
+          if (newPassword != _prevPassword && newPassword.isNotEmpty) {
+            targetStep = 5; // Password step
+          } else if (newUsername != _prevUsername && newUsername.isNotEmpty) {
+            targetStep = 4; // Username step
+          } else if (newPort != _prevPort && newPort != '80') {
+            targetStep = 3; // Port step
+          } else if (newServerUrl != _prevServerUrl && newServerUrl.isNotEmpty) {
+            targetStep = 2; // Server URL step
+          }
+
+          // Navigate to the field being edited (only if we're on a credential step)
+          if (targetStep != null && _currentStep >= 2 && _currentStep <= 5 && _currentStep != targetStep) {
+            _currentStep = targetStep;
+            _pageController.animateToPage(
+              targetStep,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+            );
+          }
+
+          // Update previous values
+          _prevServerUrl = newServerUrl;
+          _prevPort = newPort;
+          _prevUsername = newUsername;
+          _prevPassword = newPassword;
+
+          // Only proceed when user explicitly submitted (clicked "Send to TV")
+          if (credentials.submitted && credentials.isComplete) {
+            _keyboardSessionService.markCompleted();
+            _isQrSessionActive = false;
+            // Go to success step and auto-start connection test
+            _currentStep = 6;
+            _pageController.jumpToPage(6);
+            // Start connection test automatically
+            Future.delayed(const Duration(milliseconds: 300), () {
+              _completeOnboarding();
+            });
+          }
+        });
+      },
+    );
+  }
+
+  /// Stop QR code session
+  Future<void> _stopQrSession() async {
+    _credentialsSubscription?.cancel();
+    _credentialsSubscription = null;
+    await _keyboardSessionService.endSession();
+    setState(() => _isQrSessionActive = false);
   }
 
   void _goToNextStep() {
     if (_currentStep < _totalSteps - 1) {
-      setState(() => _currentStep++);
+      final nextStep = _currentStep + 1;
+      setState(() => _currentStep = nextStep);
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutCubic,
       );
+      // Auto-start connection test when reaching success step
+      if (nextStep == 6) {
+        Future.delayed(const Duration(milliseconds: 450), () {
+          _completeOnboarding();
+        });
+      }
     }
   }
 
@@ -197,11 +381,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
                       _buildWelcomeStep(),
+                      _buildLanguageStep(),  // Language first!
                       _buildServerUrlStep(),
                       _buildPortStep(),
                       _buildUsernameStep(),
                       _buildPasswordStep(),
-                      _buildLanguageStep(),
                       _buildSuccessStep(),
                     ],
                   ),
@@ -219,24 +403,34 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Logo
-          Image.asset(
-            'assets/images/streameee-logo.png',
-            height: 80,
+          // Welcome to streameee
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                'Welcome to ',
+                style: GoogleFonts.poppins(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w300,
+                  color: Colors.white.withAlpha(180),
+                ),
+              ),
+              Text(
+                'streameee',
+                style: GoogleFonts.poppins(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -1.5,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 48),
-          Text(
-            'Willkommen bei Streameee',
-            style: GoogleFonts.poppins(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 64),
+          const SizedBox(height: 80),
           _OnboardingButton(
-            label: 'Einrichtung starten',
+            label: 'Start Setup',
             onPressed: _goToNextStep,
             autofocus: true,
             focusNode: _startButtonFocus,
@@ -246,66 +440,127 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
+  // Get session URL with language parameter
+  String? get _sessionUrlWithLang {
+    final baseUrl = _keyboardSessionService.sessionUrl;
+    if (baseUrl == null) return null;
+    final lang = _uiLanguage ?? 'en';
+    return '$baseUrl?lang=$lang';
+  }
+
   Widget _buildServerUrlStep() {
     return _OnboardingInputStep(
-      title: 'Server URL',
-      description: 'Gib die URL deines IPTV-Servers ein',
+      title: _t('server_url'),
+      description: _t('server_url_desc'),
       hintText: 'http://example.com',
       controller: _serverController,
       onNext: _goToNextStep,
       onBack: _goToPreviousStep,
       nextButtonFocus: _nextButtonFocus,
       isRequired: true,
+      onStartQrSession: _startQrSession,
+      onStopQrSession: _stopQrSession,
+      qrSessionUrl: _sessionUrlWithLang,
+      isQrSessionActive: _isQrSessionActive,
+      forceTvMode: widget.forceTvMode,
+      strings: _strings[_uiLanguage ?? 'en']!,
+      inputMethod: _inputMethod,
+      showKeyboard: _showKeyboard,
+      onInputMethodChanged: (method) => setState(() => _inputMethod = method),
+      onShowKeyboardChanged: (show) => setState(() => _showKeyboard = show),
     );
   }
 
   Widget _buildPortStep() {
     return _OnboardingInputStep(
-      title: 'Port (Optional)',
-      description: 'Standard ist 80. Nur ändern wenn nötig.',
+      title: _t('port'),
+      description: _t('port_desc'),
       hintText: '80',
       controller: _portController,
       onNext: _goToNextStep,
       onBack: _goToPreviousStep,
       nextButtonFocus: _nextButtonFocus,
       isRequired: false,
+      onStartQrSession: _startQrSession,
+      onStopQrSession: _stopQrSession,
+      qrSessionUrl: _sessionUrlWithLang,
+      isQrSessionActive: _isQrSessionActive,
+      forceTvMode: widget.forceTvMode,
+      strings: _strings[_uiLanguage ?? 'en']!,
+      inputMethod: _inputMethod,
+      showKeyboard: _showKeyboard,
+      onInputMethodChanged: (method) => setState(() => _inputMethod = method),
+      onShowKeyboardChanged: (show) => setState(() => _showKeyboard = show),
     );
   }
 
   Widget _buildUsernameStep() {
     return _OnboardingInputStep(
-      title: 'Benutzername',
-      description: 'Dein IPTV Benutzername',
+      title: _t('username'),
+      description: _t('username_desc'),
       hintText: 'username',
       controller: _usernameController,
       onNext: _goToNextStep,
       onBack: _goToPreviousStep,
       nextButtonFocus: _nextButtonFocus,
       isRequired: true,
+      onStartQrSession: _startQrSession,
+      onStopQrSession: _stopQrSession,
+      qrSessionUrl: _sessionUrlWithLang,
+      isQrSessionActive: _isQrSessionActive,
+      forceTvMode: widget.forceTvMode,
+      strings: _strings[_uiLanguage ?? 'en']!,
+      inputMethod: _inputMethod,
+      showKeyboard: _showKeyboard,
+      onInputMethodChanged: (method) => setState(() => _inputMethod = method),
+      onShowKeyboardChanged: (show) => setState(() => _showKeyboard = show),
     );
   }
 
   Widget _buildPasswordStep() {
     return _OnboardingInputStep(
-      title: 'Passwort',
-      description: 'Dein IPTV Passwort',
-      hintText: 'Passwort',
+      title: _t('password'),
+      description: _t('password_desc'),
+      hintText: _t('password'),
       controller: _passwordController,
       onNext: _goToNextStep,
       onBack: _goToPreviousStep,
       nextButtonFocus: _nextButtonFocus,
       isPassword: true,
       isRequired: true,
+      onStartQrSession: _startQrSession,
+      onStopQrSession: _stopQrSession,
+      qrSessionUrl: _sessionUrlWithLang,
+      isQrSessionActive: _isQrSessionActive,
+      forceTvMode: widget.forceTvMode,
+      strings: _strings[_uiLanguage ?? 'en']!,
+      inputMethod: _inputMethod,
+      showKeyboard: _showKeyboard,
+      onInputMethodChanged: (method) => setState(() => _inputMethod = method),
+      onShowKeyboardChanged: (show) => setState(() => _showKeyboard = show),
     );
   }
 
+  void _selectLanguage(String? code) {
+    setState(() {
+      _selectedLanguage = code;
+      // Set UI language based on selection (only EN/DE supported for now)
+      if (code == 'DE') {
+        _uiLanguage = 'de';
+      } else {
+        _uiLanguage = 'en'; // Default to English for all other languages
+      }
+    });
+  }
+
   Widget _buildLanguageStep() {
+    // This step is shown in English first, then switches after selection
     return _OnboardingStepLayout(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'Bevorzugte Sprache',
+            'Choose Your Language',
             style: GoogleFonts.poppins(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -314,7 +569,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Inhalte in dieser Sprache werden priorisiert',
+            'Content in your preferred language will be prioritized',
             style: GoogleFonts.poppins(
               fontSize: 16,
               color: Colors.white.withAlpha(150),
@@ -336,7 +591,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   code: code,
                   name: name,
                   isSelected: isSelected,
-                  onSelect: () => setState(() => _selectedLanguage = code),
+                  onSelect: () => _selectLanguage(code),
                 );
               }).toList(),
             ),
@@ -348,13 +603,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _OnboardingButton(
-                label: 'Zurück',
+                label: 'Back',
                 onPressed: _goToPreviousStep,
                 isSecondary: true,
               ),
               const SizedBox(width: 16),
               _OnboardingButton(
-                label: 'Weiter',
+                label: 'Next',
                 onPressed: _goToNextStep,
                 autofocus: true,
                 focusNode: _nextButtonFocus,
@@ -367,6 +622,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildSuccessStep() {
+    final successMessage = _uiLanguage == 'de' ? 'Dein IPTV ist eingerichtet' : 'Your IPTV is set up';
+    final errorTitle = _uiLanguage == 'de' ? 'Verbindungsfehler' : 'Connection Error';
+
     return _OnboardingStepLayout(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -387,7 +645,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           const SizedBox(height: 32),
           Text(
-            _connectionError != null ? 'Verbindungsfehler' : 'Alles bereit!',
+            _connectionError != null ? errorTitle : _t('all_set'),
             style: GoogleFonts.poppins(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -396,7 +654,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            _connectionError ?? 'Dein IPTV ist eingerichtet',
+            _connectionError ?? successMessage,
             style: GoogleFonts.poppins(
               fontSize: 16,
               color: _connectionError != null
@@ -413,7 +671,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 const CircularProgressIndicator(color: Colors.white),
                 const SizedBox(height: 16),
                 Text(
-                  'Verbinde...',
+                  _t('connecting'),
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     color: Colors.white.withAlpha(150),
@@ -426,13 +684,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _OnboardingButton(
-                  label: 'Zurück',
+                  label: _t('back'),
                   onPressed: _goToPreviousStep,
                   isSecondary: true,
                 ),
                 const SizedBox(width: 16),
                 _OnboardingButton(
-                  label: _connectionError != null ? 'Erneut versuchen' : 'Los geht\'s',
+                  label: _connectionError != null ? _t('retry') : _t('lets_go'),
                   onPressed: _completeOnboarding,
                   autofocus: true,
                   focusNode: _nextButtonFocus,
@@ -462,6 +720,9 @@ class _OnboardingStepLayout extends StatelessWidget {
   }
 }
 
+/// Input method enum for TV
+enum _TvInputMethod { none, remote, qrCode }
+
 /// Step with text input using TvKeyboard
 class _OnboardingInputStep extends StatefulWidget {
   final String title;
@@ -474,6 +735,22 @@ class _OnboardingInputStep extends StatefulWidget {
   final bool isPassword;
   final bool isRequired; // If true, input must not be empty
 
+  // QR Code session callbacks
+  final Future<void> Function()? onStartQrSession;
+  final Future<void> Function()? onStopQrSession;
+  final String? qrSessionUrl;
+  final bool isQrSessionActive;
+  final bool forceTvMode;
+
+  // Input method state (from parent)
+  final _TvInputMethod inputMethod;
+  final bool showKeyboard;
+  final ValueChanged<_TvInputMethod> onInputMethodChanged;
+  final ValueChanged<bool> onShowKeyboardChanged;
+
+  // Localized strings
+  final Map<String, String> strings;
+
   const _OnboardingInputStep({
     required this.title,
     required this.description,
@@ -482,8 +759,18 @@ class _OnboardingInputStep extends StatefulWidget {
     required this.onNext,
     required this.onBack,
     required this.nextButtonFocus,
+    required this.strings,
+    required this.inputMethod,
+    required this.showKeyboard,
+    required this.onInputMethodChanged,
+    required this.onShowKeyboardChanged,
     this.isPassword = false,
     this.isRequired = true,
+    this.onStartQrSession,
+    this.onStopQrSession,
+    this.qrSessionUrl,
+    this.isQrSessionActive = false,
+    this.forceTvMode = false,
   });
 
   @override
@@ -518,11 +805,24 @@ class _OnboardingInputStepState extends State<_OnboardingInputStep> {
     }
   }
 
-  // Check if we should use TV keyboard (only on actual TV devices)
+  // Check if we should use TV keyboard (only on actual TV devices, or forced)
   bool get _useTvKeyboard {
+    if (widget.forceTvMode) return true;
     if (kIsWeb) return false;
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) return false;
     return TvUtils.useTvInterface;
+  }
+
+  // Convenience getters/setters for input method state
+  _TvInputMethod get _selectedMethod => widget.inputMethod;
+  bool get _showKeyboard => widget.showKeyboard;
+
+  void _setSelectedMethod(_TvInputMethod method) {
+    widget.onInputMethodChanged(method);
+  }
+
+  void _setShowKeyboard(bool show) {
+    widget.onShowKeyboardChanged(show);
   }
 
   @override
@@ -549,9 +849,9 @@ class _OnboardingInputStepState extends State<_OnboardingInputStep> {
           ),
           const SizedBox(height: 32),
 
-          // Input: TextField on Desktop, TvKeyboard on TV
+          // Input: TextField on Desktop, Method selection on TV
           if (_useTvKeyboard) ...[
-            // TV: Show current value display + TvKeyboard
+            // TV: Show current value display
             Container(
               width: 500,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -575,15 +875,29 @@ class _OnboardingInputStepState extends State<_OnboardingInputStep> {
               ),
             ),
             const SizedBox(height: 24),
-            SizedBox(
-              width: 500,
-              child: TvKeyboard(
-                controller: widget.controller,
-                hintText: widget.hintText,
-                autofocus: true,
-                showInputField: false,
-                onSubmit: _canProceed ? _handleNext : null,
-              ),
+
+            // Input method selection with animation
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.1),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: _selectedMethod == _TvInputMethod.none
+                  ? _buildInputMethodSelection()
+                  : _selectedMethod == _TvInputMethod.remote
+                      ? _buildRemoteInputSection()
+                      : _buildQrCodeSection(),
             ),
           ] else ...[
             // Desktop: Use native TextField
@@ -621,24 +935,388 @@ class _OnboardingInputStepState extends State<_OnboardingInputStep> {
           ],
           const SizedBox(height: 32),
 
-          // Navigation buttons
-          Row(
+          // Navigation buttons (hide when keyboard is showing - buttons are beside keyboard then)
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SizeTransition(
+                  sizeFactor: animation,
+                  axisAlignment: -1,
+                  child: child,
+                ),
+              );
+            },
+            child: (_selectedMethod == _TvInputMethod.remote && _showKeyboard)
+                ? const SizedBox.shrink(key: ValueKey('no_buttons'))
+                : Row(
+                    key: const ValueKey('nav_buttons'),
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _OnboardingButton(
+                        label: widget.strings['back']!,
+                        onPressed: widget.onBack,
+                        isSecondary: true,
+                      ),
+                      const SizedBox(width: 16),
+                      _OnboardingButton(
+                        label: widget.isRequired ? widget.strings['next']! : widget.strings['skip']!,
+                        onPressed: _canProceed ? _handleNext : null,
+                        focusNode: widget.nextButtonFocus,
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputMethodSelection() {
+    return Column(
+      key: const ValueKey('input_method_selection'),
+      children: [
+        Text(
+          widget.strings['how_to_enter']!,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            color: Colors.white.withAlpha(180),
+          ),
+        ),
+        const SizedBox(height: 16),
+        IntrinsicHeight(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _InputMethodCard(
+                icon: Icons.keyboard,
+                label: widget.strings['remote']!,
+                description: widget.strings['remote_desc']!,
+                onTap: () {
+                  _setSelectedMethod(_TvInputMethod.remote);
+                  _setShowKeyboard(true); // Open keyboard directly
+                },
+                autofocus: true,
+              ),
+              const SizedBox(width: 16),
+              _InputMethodCard(
+                icon: Icons.qr_code,
+                label: widget.strings['smartphone']!,
+                description: widget.strings['smartphone_desc']!,
+                showRecommendedBadge: true,
+                recommendedLabel: widget.strings['recommended']!,
+                onTap: () {
+                  widget.onStartQrSession?.call();
+                  _setSelectedMethod(_TvInputMethod.qrCode);
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRemoteInputSection() {
+    // Keyboard with navigation buttons beside it
+    return Row(
+      key: const ValueKey('remote_keyboard'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Keyboard
+        TvKeyboard(
+          controller: widget.controller,
+          hintText: widget.hintText,
+          autofocus: true,
+          showInputField: false,
+          showCloseButton: true,
+          onClose: () {
+            _setSelectedMethod(_TvInputMethod.none);
+            _setShowKeyboard(false);
+          },
+          onSubmit: _canProceed ? _handleNext : null,
+        ),
+
+        const SizedBox(width: 24),
+
+        // Navigation buttons column
+        Padding(
+          padding: const EdgeInsets.only(top: 48),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               _OnboardingButton(
-                label: 'Zurück',
+                label: widget.strings['back']!,
                 onPressed: widget.onBack,
                 isSecondary: true,
               ),
-              const SizedBox(width: 16),
+              const SizedBox(height: 12),
               _OnboardingButton(
-                label: widget.isRequired ? 'Weiter' : 'Überspringen',
+                label: widget.isRequired ? widget.strings['next']! : widget.strings['skip']!,
                 onPressed: _canProceed ? _handleNext : null,
                 focusNode: widget.nextButtonFocus,
               ),
             ],
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQrCodeSection() {
+    final sessionUrl = widget.qrSessionUrl;
+
+    return Row(
+      key: const ValueKey('qr_code_section'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left side: QR Code
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: sessionUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: QrImageView(
+                        data: sessionUrl,
+                        version: QrVersions.auto,
+                        size: 160,
+                        backgroundColor: Colors.white,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: Colors.black,
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: Colors.black,
+                        ),
+                      ),
+                    )
+                  : Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+            ),
+            if (sessionUrl != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceDark,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  sessionUrl.replaceAll('https://', '').split('?').first,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 10,
+                    color: Colors.white.withAlpha(150),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+
+        // Divider
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Container(
+            width: 1,
+            height: 140,
+            color: Colors.white.withAlpha(30),
+          ),
+        ),
+
+        // Right side: Info & Button
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.strings['scan_qr']!,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.white.withAlpha(180),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.sync,
+                  size: 14,
+                  color: Colors.green.shade400,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  widget.strings['waiting_input']!,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.green.shade400,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _OnboardingButton(
+              label: widget.strings['other_method']!,
+              onPressed: () {
+                widget.onStopQrSession?.call();
+                _setSelectedMethod(_TvInputMethod.none);
+              },
+              isSecondary: true,
+              autofocus: true,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Card for selecting input method on TV
+class _InputMethodCard extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String description;
+  final VoidCallback onTap;
+  final bool autofocus;
+  final bool showRecommendedBadge;
+  final String recommendedLabel;
+
+  const _InputMethodCard({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.onTap,
+    this.autofocus = false,
+    this.showRecommendedBadge = false,
+    this.recommendedLabel = 'Recommended',
+  });
+
+  @override
+  State<_InputMethodCard> createState() => _InputMethodCardState();
+}
+
+class _InputMethodCardState extends State<_InputMethodCard> {
+  bool _isFocused = false;
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.gameButtonA) {
+        widget.onTap();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (focused) => setState(() => _isFocused = focused),
+      onKeyEvent: _handleKeyEvent,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 200,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              decoration: BoxDecoration(
+                color: _isFocused ? AppTheme.accentColor : AppTheme.surfaceDark,
+                borderRadius: BorderRadius.circular(16),
+                border: _isFocused
+                    ? Border.all(color: Colors.white, width: 3)
+                    : Border.all(color: Colors.white.withAlpha(30)),
+                boxShadow: _isFocused
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.accentColor.withAlpha(100),
+                          blurRadius: 16,
+                          spreadRadius: 2,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    widget.icon,
+                    size: 48,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.description,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.white.withAlpha(150),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            // Recommended badge
+            if (widget.showRecommendedBadge)
+              Positioned(
+                top: -8,
+                right: -8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withAlpha(100),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    widget.recommendedLabel,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

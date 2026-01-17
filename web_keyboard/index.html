@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>streameee - Remote Keyboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f0f0f;
+      --surface-dark: #1a1a1a;
+      --card-dark: #252525;
+      --accent: #ffffff;
+      --accent-light: #e0e0e0;
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.6);
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent-light);
+      margin-bottom: 8px;
+      letter-spacing: -2px;
+    }
+
+    .session-id {
+      display: inline-block;
+      background: var(--surface-dark);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .session-id strong {
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      background: var(--surface-dark);
+      border-radius: 12px;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.error {
+      background: var(--error);
+      animation: none;
+    }
+
+    .status-dot.waiting {
+      background: #f59e0b;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      background: var(--surface-dark);
+      border: 2px solid transparent;
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-family: 'Poppins', sans-serif;
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--card-dark);
+    }
+
+    input::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      border: none;
+      border-radius: 12px;
+      color: #0f0f0f;
+      font-family: 'Poppins', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 12px;
+    }
+
+    .submit-btn:hover {
+      background: var(--accent-light);
+      transform: translateY(-2px);
+    }
+
+    .submit-btn:active {
+      transform: translateY(0);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .success-message {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .success-message.show {
+      display: block;
+    }
+
+    .success-icon {
+      width: 80px;
+      height: 80px;
+      background: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+
+    .success-icon svg {
+      width: 40px;
+      height: 40px;
+      color: white;
+    }
+
+    .success-message h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .success-message p {
+      color: var(--text-secondary);
+    }
+
+    .error-page {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .error-page.show {
+      display: block;
+    }
+
+    .error-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    .form-container {
+      display: block;
+    }
+
+    .form-container.hidden {
+      display: none;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">streameee</div>
+      <div class="session-id">Session: <strong id="sessionIdDisplay">---</strong></div>
+    </div>
+
+    <div class="error-page" id="errorPage">
+      <div class="error-icon">:(</div>
+      <h2 id="errorTitle">Session not found</h2>
+      <p id="errorText">This session has expired or does not exist. Please scan the QR code again.</p>
+    </div>
+
+    <div class="form-container" id="formContainer">
+      <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connecting to TV...</span>
+      </div>
+
+      <form id="credentialsForm">
+        <div class="form-group">
+          <label for="serverUrl" id="labelServerUrl">Server URL</label>
+          <input type="url" id="serverUrl" placeholder="http://example.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="port" id="labelPort">Port (Optional)</label>
+          <input type="text" id="port" placeholder="80" value="80">
+          <div class="hint" id="portHint">Default is 80</div>
+        </div>
+
+        <div class="form-group">
+          <label for="username" id="labelUsername">Username</label>
+          <input type="text" id="username" required>
+        </div>
+
+        <div class="form-group">
+          <label for="password" id="labelPassword">Password</label>
+          <input type="password" id="password" required>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">Send to TV</button>
+      </form>
+    </div>
+
+    <div class="success-message" id="successMessage">
+      <div class="success-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h2 id="successTitle">Successfully sent!</h2>
+      <p id="successText">Your credentials have been transferred to the TV. You can close this page now.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getDatabase, ref, get, set, update, onValue } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+    // Localization
+    const strings = {
+      en: {
+        connecting: 'Connecting to TV...',
+        connected: 'Connected to TV',
+        errorTitle: 'Session not found',
+        errorText: 'This session has expired or does not exist. Please scan the QR code again.',
+        serverUrl: 'Server URL',
+        port: 'Port (Optional)',
+        portHint: 'Default is 80',
+        username: 'Username',
+        password: 'Password',
+        sendToTv: 'Send to TV',
+        sending: 'Sending...',
+        successTitle: 'Successfully sent!',
+        successText: 'Your credentials have been transferred to the TV. You can close this page now.',
+        sendError: 'Error sending'
+      },
+      de: {
+        connecting: 'Verbinde mit TV...',
+        connected: 'Mit TV verbunden',
+        errorTitle: 'Session nicht gefunden',
+        errorText: 'Diese Session ist abgelaufen oder existiert nicht. Bitte scanne den QR-Code erneut.',
+        serverUrl: 'Server URL',
+        port: 'Port (Optional)',
+        portHint: 'Standard ist 80',
+        username: 'Benutzername',
+        password: 'Passwort',
+        sendToTv: 'An TV senden',
+        sending: 'Sende...',
+        successTitle: 'Erfolgreich gesendet!',
+        successText: 'Deine Zugangsdaten wurden an den TV übertragen. Du kannst diese Seite jetzt schließen.',
+        sendError: 'Fehler beim Senden'
+      }
+    };
+
+    // Get language from URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lang') === 'de' ? 'de' : 'en';
+    const t = strings[lang];
+
+    // Apply translations
+    function applyTranslations() {
+      document.getElementById('statusText').textContent = t.connecting;
+      document.getElementById('errorTitle').textContent = t.errorTitle;
+      document.getElementById('errorText').textContent = t.errorText;
+      document.getElementById('labelServerUrl').textContent = t.serverUrl;
+      document.getElementById('labelPort').textContent = t.port;
+      document.getElementById('portHint').textContent = t.portHint;
+      document.getElementById('labelUsername').textContent = t.username;
+      document.getElementById('labelPassword').textContent = t.password;
+      document.getElementById('submitBtn').textContent = t.sendToTv;
+      document.getElementById('successTitle').textContent = t.successTitle;
+      document.getElementById('successText').textContent = t.successText;
+      document.documentElement.lang = lang;
+    }
+
+    applyTranslations();
+
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCMqIXOkgaEnLrICxeoE-_o2MJcDR98Lws",
+      authDomain: "streameee-app.firebaseapp.com",
+      projectId: "streameee-app",
+      storageBucket: "streameee-app.firebasestorage.app",
+      messagingSenderId: "422872195312",
+      appId: "1:422872195312:web:300efe5f4ee5d6d5d7e235",
+      databaseURL: "https://streameee-app-default-rtdb.europe-west1.firebasedatabase.app"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    // Get session ID from URL path (before the query string)
+    const pathParts = window.location.pathname.split('/');
+    const sessionId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+
+    // DOM elements
+    const sessionIdDisplay = document.getElementById('sessionIdDisplay');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const formContainer = document.getElementById('formContainer');
+    const errorPage = document.getElementById('errorPage');
+    const successMessage = document.getElementById('successMessage');
+    const form = document.getElementById('credentialsForm');
+    const submitBtn = document.getElementById('submitBtn');
+
+    sessionIdDisplay.textContent = sessionId || '---';
+
+    // Check if session exists
+    async function checkSession() {
+      if (!sessionId || sessionId === 'keyboard') {
+        showError();
+        return;
+      }
+
+      try {
+        const sessionRef = ref(database, `keyboard_sessions/${sessionId}`);
+        const snapshot = await get(sessionRef);
+
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          if (data.status === 'completed') {
+            showSuccess();
+          } else {
+            showConnected();
+            listenToStatus(sessionRef);
+          }
+        } else {
+          showError();
+        }
+      } catch (error) {
+        console.error('Error checking session:', error);
+        showError();
+      }
+    }
+
+    function showError() {
+      formContainer.classList.add('hidden');
+      errorPage.classList.add('show');
+    }
+
+    function showConnected() {
+      statusDot.classList.remove('error', 'waiting');
+      statusText.textContent = t.connected;
+    }
+
+    function showSuccess() {
+      formContainer.classList.add('hidden');
+      successMessage.classList.add('show');
+    }
+
+    function listenToStatus(sessionRef) {
+      onValue(sessionRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          if (data.status === 'completed') {
+            showSuccess();
+          }
+        }
+      });
+    }
+
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = t.sending;
+
+      const serverUrl = document.getElementById('serverUrl').value.trim();
+      const port = document.getElementById('port').value.trim() || '80';
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      try {
+        const sessionRef = ref(database, `keyboard_sessions/${sessionId}`);
+        await update(sessionRef, {
+          serverUrl,
+          port,
+          username,
+          password,
+          submitted: true, // Signal to TV that user explicitly submitted
+          updatedAt: Date.now()
+        });
+
+        showSuccess();
+      } catch (error) {
+        console.error('Error sending credentials:', error);
+        submitBtn.disabled = false;
+        submitBtn.textContent = t.sendToTv;
+        statusDot.classList.add('error');
+        statusText.textContent = t.sendError;
+      }
+    });
+
+    // Auto-save on input change (optional live sync)
+    let saveTimeout;
+    const inputs = ['serverUrl', 'port', 'username', 'password'];
+
+    inputs.forEach(inputId => {
+      document.getElementById(inputId).addEventListener('input', () => {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(async () => {
+          const sessionRef = ref(database, `keyboard_sessions/${sessionId}`);
+          const updates = {};
+          inputs.forEach(id => {
+            const value = document.getElementById(id).value;
+            if (id === 'port') {
+              updates[id] = value || '80';
+            } else {
+              updates[id] = value;
+            }
+          });
+          updates.updatedAt = Date.now();
+
+          try {
+            await update(sessionRef, updates);
+          } catch (error) {
+            console.error('Auto-save error:', error);
+          }
+        }, 500);
+      });
+    });
+
+    // Start
+    checkSession();
+  </script>
+</body>
+</html>

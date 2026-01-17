@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'shared/widgets/main_navigation.dart';
 import 'screens/splash_screen.dart';
@@ -16,6 +18,16 @@ import 'utils/tv_utils.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (only on supported platforms)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    // Firebase not configured for this platform (e.g., macOS) - continue without it
+    debugPrint('Firebase not available on this platform: $e');
+  }
 
   // Initialize MediaKit for video playback
   MediaKit.ensureInitialized();

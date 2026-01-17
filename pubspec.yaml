@@ -64,6 +64,9 @@ dependencies:
 
   # Audio (Navigation Sounds)
   audioplayers: ^6.1.0
+  firebase_core: ^4.3.0
+  firebase_database: ^12.1.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

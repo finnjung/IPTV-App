@@ -9,6 +9,7 @@ import '../services/xtream_service.dart';
 import '../utils/content_parser.dart';
 import 'login_screen.dart';
 import 'legal_page_screen.dart';
+import 'onboarding_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -654,6 +655,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _openOnboardingTest() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => OnboardingScreen(
+          onComplete: () {
+            Navigator.of(context).pop();
+          },
+          forceTvMode: true, // Enable TV mode for testing QR input
+        ),
+      ),
+    );
+  }
+
   Widget _buildAppSection(ColorScheme colorScheme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -747,6 +761,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         BlendMode.srcIn,
                       ),
                     ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // DEBUG: Onboarding Test Button (TEMPORARY)
+        _FocusableProfileItem(
+          onTap: () => _openOnboardingTest(),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.orange.withAlpha(30),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.orange.withAlpha(100),
+                width: 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.qr_code,
+                      size: 20,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'QR-Code Test (DEV)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Onboarding mit QR-Eingabe testen',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.orange.withAlpha(180),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.orange,
+                  ),
                 ],
               ),
             ),

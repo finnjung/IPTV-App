@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "keyboard_sessions": {
+      "$sessionId": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

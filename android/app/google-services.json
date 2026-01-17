@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "422872195312",
+    "firebase_url": "https://streameee-app-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "streameee-app",
+    "storage_bucket": "streameee-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:422872195312:android:57f79777f933ee54d7e235",
+        "android_client_info": {
+          "package_name": "com.streameee.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBiGWhuyzuMOyVcxgrxlRG-JWyQkno7drk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
