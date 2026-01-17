@@ -41,23 +41,31 @@
 
     .header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 20px;
     }
 
     .logo {
       font-size: 28px;
       font-weight: 700;
       color: var(--accent-light);
-      margin-bottom: 8px;
+      margin-bottom: 12px;
       letter-spacing: -2px;
     }
 
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
     .session-id {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
       background: var(--surface-dark);
-      padding: 6px 16px;
+      padding: 6px 12px;
       border-radius: 20px;
-      font-size: 14px;
+      font-size: 12px;
       color: var(--text-secondary);
     }
 
@@ -67,15 +75,13 @@
     }
 
     .status-bar {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 12px;
+      gap: 6px;
+      padding: 6px 12px;
       background: var(--surface-dark);
-      border-radius: 12px;
-      margin-bottom: 24px;
-      font-size: 14px;
+      border-radius: 20px;
+      font-size: 12px;
     }
 
     .status-dot {
@@ -168,10 +174,14 @@
       display: none;
       text-align: center;
       padding: 40px 20px;
+      min-height: calc(100vh - 140px);
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
     }
 
     .success-message.show {
-      display: block;
+      display: flex;
     }
 
     .success-icon {
@@ -234,7 +244,13 @@
   <div class="container">
     <div class="header">
       <div class="logo">streameee</div>
-      <div class="session-id">Session: <strong id="sessionIdDisplay">---</strong></div>
+      <div class="header-row">
+        <div class="session-id">Session: <strong id="sessionIdDisplay">---</strong></div>
+        <div class="status-bar">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
     </div>
 
     <div class="error-page" id="errorPage">
@@ -244,11 +260,6 @@
     </div>
 
     <div class="form-container" id="formContainer">
-      <div class="status-bar">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Connecting to TV...</span>
-      </div>
-
       <form id="credentialsForm">
         <div class="form-group">
           <label for="serverUrl" id="labelServerUrl">Server URL</label>
@@ -293,8 +304,8 @@
     // Localization
     const strings = {
       en: {
-        connecting: 'Connecting to TV...',
-        connected: 'Connected to TV',
+        connecting: 'Connecting...',
+        connected: 'Connected',
         errorTitle: 'Session not found',
         errorText: 'This session has expired or does not exist. Please scan the QR code again.',
         serverUrl: 'Server URL',
@@ -309,8 +320,8 @@
         sendError: 'Error sending'
       },
       de: {
-        connecting: 'Verbinde mit TV...',
-        connected: 'Mit TV verbunden',
+        connecting: 'Verbinde...',
+        connected: 'Verbunden',
         errorTitle: 'Session nicht gefunden',
         errorText: 'Diese Session ist abgelaufen oder existiert nicht. Bitte scanne den QR-Code erneut.',
         serverUrl: 'Server URL',
