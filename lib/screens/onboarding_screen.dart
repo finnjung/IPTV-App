@@ -213,6 +213,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _startQrSession() async {
     await _keyboardSessionService.startSession();
 
+    // Push any existing values to Firebase immediately (for bidirectional sync)
+    // This ensures phone sees what was already typed on TV
+    await _keyboardSessionService.updateFromTv(
+      serverUrl: _serverController.text,
+      port: _portController.text.isEmpty ? '80' : _portController.text,
+      username: _usernameController.text,
+      password: _passwordController.text,
+    );
+
     // Add listeners to sync TV keyboard input to phone
     _serverController.addListener(_syncTvInputToFirebase);
     _portController.addListener(_syncTvInputToFirebase);
