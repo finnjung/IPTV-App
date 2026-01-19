@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../services/navigation_sound_service.dart';
 
 /// Platform channel for TV detection on Android
-const _tvDetectionChannel = MethodChannel('com.iptv.iptv_app/tv_detection');
+const _tvDetectionChannel = MethodChannel('com.streameee.app/tv_detection');
 
 /// Utility class for Android TV / Fire TV support
 class TvUtils {

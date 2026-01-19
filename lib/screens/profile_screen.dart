@@ -6,10 +6,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../services/xtream_service.dart';
+import '../services/app_update_service.dart';
 import '../utils/content_parser.dart';
+import '../widgets/update_dialog.dart';
 import 'login_screen.dart';
 import 'legal_page_screen.dart';
-import 'onboarding_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -20,6 +21,23 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ScrollController _scrollController = ScrollController();
+  bool _isCheckingUpdate = false;
+  String _appVersion = '1.0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    if (!kIsWeb && Platform.isAndroid) {
+      final version = await context.read<AppUpdateService>().getVersionName();
+      if (mounted) {
+        setState(() => _appVersion = version);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -616,6 +634,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isRefreshing = false;
 
+  Future<void> _checkForUpdates() async {
+    if (_isCheckingUpdate) return;
+
+    setState(() => _isCheckingUpdate = true);
+
+    try {
+      final updateService = context.read<AppUpdateService>();
+      final updateInfo = await updateService.checkForUpdate();
+
+      if (mounted) {
+        if (updateInfo != null) {
+          await UpdateDialog.show(context, updateInfo);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Du hast bereits die neueste Version',
+                style: GoogleFonts.poppins(),
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Fehler beim Prüfen auf Updates',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCheckingUpdate = false);
+      }
+    }
+  }
+
   Future<void> _refreshAllContent() async {
     if (_isRefreshing) return;
 
@@ -653,19 +716,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() => _isRefreshing = false);
       }
     }
-  }
-
-  void _openOnboardingTest() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => OnboardingScreen(
-          onComplete: () {
-            Navigator.of(context).pop();
-          },
-          forceTvMode: true, // Enable TV mode for testing QR input
-        ),
-      ),
-    );
   }
 
   Widget _buildAppSection(ColorScheme colorScheme) {
@@ -767,69 +817,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        // DEBUG: Onboarding Test Button (TEMPORARY)
-        _FocusableProfileItem(
-          onTap: () => _openOnboardingTest(),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.orange.withAlpha(30),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.orange.withAlpha(100),
-                width: 1,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.qr_code,
-                      size: 20,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'QR-Code Test (DEV)',
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.orange,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Onboarding mit QR-Eingabe testen',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: Colors.orange.withAlpha(180),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.orange,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
         // Erscheinungsbild
         _FocusableProfileItem(
           onTap: () {},
@@ -900,77 +887,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        // Über
-        _FocusableProfileItem(
-          onTap: () {},
-          child: Container(
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: colorScheme.outline.withAlpha(25),
-                width: 1,
+        // Nach Updates suchen (nur auf Android/Fire TV)
+        if (!kIsWeb && Platform.isAndroid) ...[
+          const SizedBox(height: 12),
+          _FocusableProfileItem(
+            onTap: _isCheckingUpdate ? null : _checkForUpdates,
+            child: Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: colorScheme.outline.withAlpha(25),
+                  width: 1,
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: colorScheme.onSurface.withAlpha(15),
-                      borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withAlpha(15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _isCheckingUpdate
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.onSurface.withAlpha(180),
+                              ),
+                            )
+                          : SvgPicture.asset(
+                              'assets/icons/arrow-circle-up.svg',
+                              width: 20,
+                              height: 20,
+                              colorFilter: ColorFilter.mode(
+                                colorScheme.onSurface.withAlpha(180),
+                                BlendMode.srcIn,
+                              ),
+                            ),
                     ),
-                    child: SvgPicture.asset(
-                      'assets/icons/info.svg',
-                      width: 20,
-                      height: 20,
-                      colorFilter: ColorFilter.mode(
-                        colorScheme.onSurface.withAlpha(180),
-                        BlendMode.srcIn,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Nach Updates suchen',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _isCheckingUpdate
+                                ? 'Wird geprüft...'
+                                : 'Aktuelle Version: $_appVersion',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Über',
-                          style: GoogleFonts.poppins(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: colorScheme.onSurface,
-                          ),
+                    if (!_isCheckingUpdate)
+                      SvgPicture.asset(
+                        'assets/icons/caret-right.svg',
+                        width: 18,
+                        height: 18,
+                        colorFilter: ColorFilter.mode(
+                          colorScheme.onSurface.withAlpha(100),
+                          BlendMode.srcIn,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Version 1.0.0',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: colorScheme.onSurface.withAlpha(150),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SvgPicture.asset(
-                    'assets/icons/caret-right.svg',
-                    width: 18,
-                    height: 18,
-                    colorFilter: ColorFilter.mode(
-                      colorScheme.onSurface.withAlpha(100),
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ],
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }

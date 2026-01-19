@@ -14,6 +14,8 @@ import 'screens/onboarding_screen.dart';
 import 'screens/loading_screen.dart';
 import 'services/xtream_service.dart';
 import 'services/navigation_sound_service.dart';
+import 'services/app_update_service.dart';
+import 'widgets/update_dialog.dart';
 import 'utils/tv_utils.dart';
 
 void main() async {
@@ -65,6 +67,9 @@ class IPTVApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => XtreamService()..loadSavedCredentials(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => AppUpdateService(),
+        ),
       ],
       child: MaterialApp(
         title: 'IPTV Player',
@@ -81,6 +86,7 @@ class IPTVApp extends StatelessWidget {
 /// App-Zustand nach Splash Screen
 enum _AppState {
   splash,           // Splash Screen wird angezeigt
+  checkingUpdate,   // Update-Check wird durchgeführt (nur Fire TV)
   onboarding,       // Onboarding wird angezeigt
   loading,          // LoadingScreen für langsames Laden (API)
   ready,            // MainNavigation wird angezeigt
@@ -95,8 +101,35 @@ class _AppWithSplash extends StatefulWidget {
 
 class _AppWithSplashState extends State<_AppWithSplash> {
   _AppState _state = _AppState.splash;
+  SplashResult? _pendingSplashResult;
 
   void _handleSplashComplete(SplashResult result) {
+    // On Fire TV, check for updates first
+    if (TvUtils.isTvDevice && !kIsWeb && Platform.isAndroid) {
+      _pendingSplashResult = result;
+      setState(() => _state = _AppState.checkingUpdate);
+      _checkForUpdates();
+    } else {
+      _transitionToState(result);
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    final updateService = context.read<AppUpdateService>();
+    final updateInfo = await updateService.checkForUpdate();
+
+    if (updateInfo != null && mounted) {
+      // Show update dialog
+      await UpdateDialog.show(context, updateInfo);
+    }
+
+    // Continue with normal flow after update check/dialog
+    if (mounted && _pendingSplashResult != null) {
+      _transitionToState(_pendingSplashResult!);
+    }
+  }
+
+  void _transitionToState(SplashResult result) {
     setState(() {
       switch (result) {
         case SplashResult.needsOnboarding:
@@ -118,6 +151,17 @@ class _AppWithSplashState extends State<_AppWithSplash> {
       case _AppState.splash:
         return SplashScreen(
           onComplete: _handleSplashComplete,
+        );
+
+      case _AppState.checkingUpdate:
+        // Show a minimal loading indicator while checking for updates
+        return const Scaffold(
+          backgroundColor: AppTheme.backgroundDark,
+          body: Center(
+            child: CircularProgressIndicator(
+              color: AppTheme.primaryColor,
+            ),
+          ),
         );
 
       case _AppState.onboarding:
